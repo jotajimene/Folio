@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Folio: del manuscrito al libro impreso. Funciona sin internet.",
   "main": "main.js",
   "scripts": {
@@ -42,6 +42,7 @@
       "preload-imprimir.js",
       "modelo-local.js",
       "impresion.js",
+      "equipo.js",
       "herramientas-externas.js",
       "icc/**/*",
       "app/**/*",

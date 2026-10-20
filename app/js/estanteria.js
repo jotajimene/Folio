@@ -21,7 +21,7 @@
   }
   async function abrirRuta(ruta) {
     if (Folio.sucio && Folio.p.bloques.length && !(await App.confirmar('Hay cambios sin guardar en disco (la copia automática sí los tiene). ¿Abrir otro libro igualmente?', 'Abrir'))) return;
-    try { const r = await Escritorio.abrirProyecto(ruta); if (r && !r.cancelado) { Folio.cargar(r.datos.proyecto, r.ruta, {}, r.datos.originales || {}); Folio.recursos = Object.fromEntries(Object.entries(r.datos.recursos || {}).map(([k, v]) => [k, 'data:' + (/\.png$/i.test(k) ? 'image/png' : /\.(jpe?g)$/i.test(k) ? 'image/jpeg' : /\.otf$/i.test(k) ? 'font/otf' : 'application/octet-stream') + ';base64,' + v])); Folio.guardadoDisco = new Date(); App.aviso('Libro abierto.'); App.ir(0, { forzar: true }); } }
+    try { const r = await Escritorio.abrirProyecto(ruta); if (r && !r.cancelado) { Folio.avisoEnUso(r.enUso); Folio.cargar(r.datos.proyecto, r.ruta, {}, r.datos.originales || {}); Folio.recursos = Object.fromEntries(Object.entries(r.datos.recursos || {}).map(([k, v]) => [k, 'data:' + (/\.png$/i.test(k) ? 'image/png' : /\.(jpe?g)$/i.test(k) ? 'image/jpeg' : /\.otf$/i.test(k) ? 'font/otf' : 'application/octet-stream') + ';base64,' + v])); Folio.guardadoDisco = new Date(); App.aviso('Libro abierto.'); App.ir(0, { forzar: true }); } }
     catch (e) { App.aviso('No encontré ese archivo; quizá se movió o se borró. ' + e.message, { tipo: 'mal', ms: 7000 }); Perfil.datos.recientes = (Perfil.datos.recientes || []).filter(x => x.ruta !== ruta); Perfil.guardar(); }
   }
   async function abrir() {

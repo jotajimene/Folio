@@ -7,6 +7,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const { pathToFileURL } = require('url');
 const JSZip = require('jszip');
+const Equipo = require('./equipo');
 const { PDFDocument } = require('pdf-lib');
 
 const RAIZ = path.join(__dirname, 'app');
@@ -68,7 +69,7 @@ app.whenReady().then(() => {
       { label: 'Abrir proyecto…', accelerator: 'CmdOrCtrl+O', click: () => ventana.webContents.send('menu', 'abrir') },
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => ventana.webContents.send('menu', 'guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ventana.webContents.send('menu', 'guardar-como') },
-      { type: 'separator' }, { label: 'Modelo de texto local…', click: () => ventana.webContents.send('menu', 'modelo') }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') }, { label: 'Herramientas de Folio…', click: () => ventana.webContents.send('menu', 'herramientas') },
+      { type: 'separator' }, { label: 'Modelo de texto local…', click: () => ventana.webContents.send('menu', 'modelo') }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') }, { label: 'Herramientas de Folio…', click: () => ventana.webContents.send('menu', 'herramientas') }, { label: 'Carpeta de trabajo…', click: () => ventana.webContents.send('menu', 'carpeta-trabajo') },
       { type: 'separator' }, { label: 'Buscar actualizaciones…', click: () => ventana.webContents.send('menu', 'actualizar') },
       { type: 'separator' }, { role: 'quit', label: 'Salir' }] },
     { label: 'Editar', submenu: [{ label: 'Deshacer', accelerator: 'CmdOrCtrl+Z', click: () => ventana.webContents.send('menu', 'deshacer') }, { label: 'Rehacer', accelerator: 'CmdOrCtrl+Y', click: () => ventana.webContents.send('menu', 'rehacer') }, { type: 'separator' }, { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' }, { role: 'selectAll', label: 'Seleccionar todo' }] },
@@ -77,6 +78,7 @@ app.whenReady().then(() => {
   crearVentana();
 });
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => Equipo.soltarTodo());
 
 // ---------------- proyecto ----------------
 // Un .folio es un ZIP: proyecto.json + recursos/ (imágenes y fuentes propias) + original/ (archivos importados)
@@ -86,6 +88,7 @@ async function empaquetar(datos) {
   zip.file('proyecto.json', JSON.stringify(proyecto, null, 1));
   for (const [nombre, b64] of Object.entries(recursos)) zip.file('recursos/' + nombre, b64, { base64: true });
   for (const [nombre, b64] of Object.entries(originales)) zip.file('original/' + nombre, b64, { base64: true });
+  zip.file('guardado.json', JSON.stringify({ equipo: Equipo.nombreEquipo(), fecha: new Date().toISOString(), version: require('./package.json').version }));
   zip.file('LEEME.txt', 'Proyecto de Folio. Ábrelo con Folio. Contiene el texto del libro, sus imágenes y los archivos originales importados.');
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
@@ -100,11 +103,22 @@ async function desempaquetar(buf) {
   }
   return { proyecto, recursos, originales };
 }
-ipcMain.handle('proyecto:guardar', async (_e, { ruta, datos, como }) => {
+// cuándo se leyó o guardó cada libro en este equipo: si en el disco aparece una versión posterior (el otro computador
+// la guardó en la carpeta compartida), Folio pregunta antes de pisarla
+const vistos = new Map();
+let rutaActual = null;
+async function quienGuardo(ruta) { try { const z = await JSZip.loadAsync(await fsp.readFile(ruta)); const f = z.file('guardado.json'); return f ? JSON.parse(await f.async('string')) : null; } catch { return null; } }
+async function tomar(ruta) { if (rutaActual && rutaActual !== ruta) await Equipo.soltar(rutaActual); rutaActual = ruta; return ruta ? Equipo.marcarAbierto(ruta) : null; }
+ipcMain.handle('proyecto:guardar', async (_e, { ruta, datos, como, forzar, sugerido }) => {
   if (!ruta || como) {
-    const r = await dialog.showSaveDialog(ventana, { title: 'Guardar proyecto de Folio', defaultPath: (datos.proyecto.titulo || 'libro').replace(/[\\/:*?"<>|]/g, '') + '.folio', filters: [{ name: 'Proyecto de Folio', extensions: ['folio'] }] });
+    const dir = Equipo.carpetaProyectos(); if (dir) await fsp.mkdir(dir, { recursive: true }).catch(() => {});
+    const nombre = (sugerido || datos.proyecto.titulo || 'libro').replace(/[\\/:*?"<>|]/g, '') + '.folio';
+    const r = await dialog.showSaveDialog(ventana, { title: 'Guardar proyecto de Folio', defaultPath: dir ? path.join(dir, nombre) : nombre, filters: [{ name: 'Proyecto de Folio', extensions: ['folio'] }] });
     if (r.canceled) return { cancelado: true };
     ruta = r.filePath;
+  } else if (!forzar && fs.existsSync(ruta) && vistos.has(ruta)) {
+    const m = (await fsp.stat(ruta)).mtimeMs;
+    if (m > vistos.get(ruta) + 1500) { const q = await quienGuardo(ruta); return { conflicto: { equipo: q && q.equipo || 'otro computador', fecha: q && q.fecha || new Date(m).toISOString(), mismo: !!(q && q.equipo === Equipo.nombreEquipo()) }, ruta }; }
   }
   const buf = await empaquetar(datos);
   // escritura segura: archivo temporal y renombre; se guarda la versión anterior como .bak
@@ -112,12 +126,14 @@ ipcMain.handle('proyecto:guardar', async (_e, { ruta, datos, como }) => {
   await fsp.writeFile(tmp, buf);
   if (fs.existsSync(ruta)) await fsp.copyFile(ruta, ruta + '.bak').catch(() => {});
   await fsp.rename(tmp, ruta);
+  vistos.set(ruta, (await fsp.stat(ruta)).mtimeMs);
+  if (rutaActual !== ruta) await tomar(ruta);
   const respaldo = await respaldar(ruta).catch(e => ({ error: e.message }));
   return { ruta, bytes: buf.length, fecha: new Date().toISOString(), respaldo };
 });
 // copia en una segunda carpeta (un pendrive, Dropbox, otro disco): las últimas 5 de cada libro
 async function respaldar(ruta) {
-  let perfil = null; try { perfil = JSON.parse(await fsp.readFile(rutaPerfil(), 'utf8')); } catch {}
+  const perfil = await Equipo.leerPerfil().catch(() => null);
   const dir = perfil && perfil.respaldo; if (!dir) return null;
   if (!fs.existsSync(dir)) return { error: 'La carpeta de respaldo no está disponible: ' + dir };
   const base = path.basename(ruta, '.folio'), sello = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -130,14 +146,19 @@ async function respaldar(ruta) {
 ipcMain.handle('carpeta:elegir', async (_e, titulo) => { const r = await dialog.showOpenDialog(ventana, { title: titulo || 'Elegir carpeta', properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 ipcMain.handle('proyecto:abrir', async (_e, ruta) => {
   if (!ruta) {
-    const r = await dialog.showOpenDialog(ventana, { title: 'Abrir proyecto de Folio', filters: [{ name: 'Proyecto de Folio', extensions: ['folio', 'json'] }], properties: ['openFile'] });
+    const dir = Equipo.carpetaProyectos();
+    const r = await dialog.showOpenDialog(ventana, { title: 'Abrir proyecto de Folio', defaultPath: dir || undefined, filters: [{ name: 'Proyecto de Folio', extensions: ['folio', 'json'] }], properties: ['openFile'] });
     if (r.canceled) return { cancelado: true };
     ruta = r.filePaths[0];
   }
   const buf = await fsp.readFile(ruta);
   if (ruta.endsWith('.json')) return { ruta: null, datos: { proyecto: JSON.parse(buf.toString('utf8')), recursos: {}, originales: {} }, heredado: true };
-  return { ruta, datos: await desempaquetar(buf) };
+  const datos = await desempaquetar(buf);
+  vistos.set(ruta, (await fsp.stat(ruta)).mtimeMs);
+  const enUso = await tomar(ruta);
+  return { ruta, datos, enUso, guardado: await quienGuardo(ruta) };
 });
+ipcMain.handle('proyecto:soltar', () => tomar(null));
 ipcMain.handle('proyecto:autoguardar', async (_e, datos) => {
   await fsp.mkdir(path.dirname(autoguardado()), { recursive: true });
   const tmp = autoguardado() + '.tmp';
@@ -152,7 +173,16 @@ ipcMain.handle('proyecto:autoguardar', async (_e, datos) => {
   return true;
 });
 ipcMain.handle('proyecto:recuperar', async () => {
-  try { return JSON.parse(await fsp.readFile(autoguardado(), 'utf8')); } catch { return null; }
+  let d; try { d = JSON.parse(await fsp.readFile(autoguardado(), 'utf8')); } catch { return null; }
+  // si el libro se guardó después en otro computador (carpeta compartida), la copia de este equipo quedó atrasada
+  try {
+    if (d && d.ruta && fs.existsSync(d.ruta)) {
+      const disco = (await fsp.stat(d.ruta)).mtimeMs, copia = (await fsp.stat(autoguardado())).mtimeMs;
+      if (disco > copia + 2000) { const q = await quienGuardo(d.ruta); if (!q || q.equipo !== Equipo.nombreEquipo()) d.discoMasNuevo = { equipo: q && q.equipo || 'otro computador', fecha: q && q.fecha || new Date(disco).toISOString() }; }
+      if (!d.discoMasNuevo) { vistos.set(d.ruta, disco); d.enUso = await tomar(d.ruta); }
+    }
+  } catch {}
+  return d;
 });
 ipcMain.handle('archivo:guardar', async (_e, { nombre, b64, filtros }) => {
   const r = await dialog.showSaveDialog(ventana, { defaultPath: nombre, filters: filtros || [] });
@@ -161,9 +191,17 @@ ipcMain.handle('archivo:guardar', async (_e, { nombre, b64, filtros }) => {
   return { ruta: r.filePath };
 });
 // perfil de la editorial: datos que valen para todos los libros (sello, logo, paletas propias, numeración, tipografías)
-const rutaPerfil = () => path.join(app.getPath('userData'), 'perfil.json');
-ipcMain.handle('perfil:leer', async () => { try { return JSON.parse(await fsp.readFile(rutaPerfil(), 'utf8')); } catch { return null; } });
-ipcMain.handle('perfil:guardar', async (_e, datos) => { await fsp.mkdir(path.dirname(rutaPerfil()), { recursive: true }); const tmp = rutaPerfil() + '.tmp'; await fsp.writeFile(tmp, JSON.stringify(datos, null, 1)); await fsp.rename(tmp, rutaPerfil()); return true; });
+// con carpeta de trabajo, el perfil vive ahí (ver equipo.js)
+ipcMain.handle('perfil:leer', () => Equipo.leerPerfil());
+ipcMain.handle('perfil:guardar', (_e, datos) => Equipo.guardarPerfil(datos));
+// carpeta de trabajo: la elige cada persona en su computador
+ipcMain.handle('trabajo:estado', () => ({ carpeta: Equipo.carpeta(), elegida: Equipo.carpetaElegida(), equipo: Equipo.nombreEquipo() }));
+ipcMain.handle('trabajo:elegir', async () => {
+  const r = await dialog.showOpenDialog(ventana, { title: 'Carpeta de trabajo de Folio (por ejemplo, una carpeta de Google Drive)', properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled) return { cancelado: true };
+  return Equipo.usarCarpeta(r.filePaths[0]);
+});
+ipcMain.handle('trabajo:dejar', () => Equipo.usarCarpeta(null));
 // abrir archivos sueltos (tipografías, imágenes, Word de vuelta del corrector) sin pasar por un input
 ipcMain.handle('archivo:elegir', async (_e, { titulo, filtros, multiple }) => {
   const r = await dialog.showOpenDialog(ventana, { title: titulo, filters: filtros || [], properties: multiple ? ['openFile', 'multiSelections'] : ['openFile'] });

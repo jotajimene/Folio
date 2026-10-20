@@ -188,7 +188,7 @@ app.on('will-quit', () => { if (lt) try { lt.proc.kill(); } catch {} });
 
 // ---------------- archivo ampliado: buscar en Wikimedia Commons (solo cuando tú lo pides) ----------------
 // Se envía únicamente la palabra que buscas; nada del manuscrito. Lo que traes queda en tu carpeta de Folio.
-const carpetaExtra = () => path.join(datos(), 'archivo-extra');
+const carpetaExtra = () => require('./equipo').carpetaExtra(); // en la carpeta de trabajo si hay una
 function traer(url, { json = false, max = 40e6, saltos = 0 } = {}) {
   return new Promise((res, rej) => {
     const u = new URL(url);

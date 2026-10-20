@@ -1,7 +1,9 @@
 // Puente seguro entre la interfaz y el sistema (sin acceso directo a Node).
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('Escritorio', {
-  guardarProyecto: (ruta, datos, como) => ipcRenderer.invoke('proyecto:guardar', { ruta, datos, como }),
+  guardarProyecto: (ruta, datos, como, forzar, sugerido) => ipcRenderer.invoke('proyecto:guardar', { ruta, datos, como, forzar, sugerido }),
+  soltarProyecto: () => ipcRenderer.invoke('proyecto:soltar'),
+  trabajo: { estado: () => ipcRenderer.invoke('trabajo:estado'), elegir: () => ipcRenderer.invoke('trabajo:elegir'), dejar: () => ipcRenderer.invoke('trabajo:dejar') },
   abrirProyecto: ruta => ipcRenderer.invoke('proyecto:abrir', ruta),
   autoguardar: datos => ipcRenderer.invoke('proyecto:autoguardar', datos),
   recuperar: () => ipcRenderer.invoke('proyecto:recuperar'),

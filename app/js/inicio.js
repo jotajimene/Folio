@@ -10,9 +10,15 @@
     if (window.Escritorio) recuperado = await Escritorio.recuperar();
     else { const t = localStorage.getItem('folio-autoguardado'); if (t) recuperado = JSON.parse(t); }
   } catch (e) { console.error(e); }
+  // el libro se guardó después en el otro computador: se abre esa versión (la copia de este equipo sigue en las copias diarias)
+  if (recuperado && recuperado.discoMasNuevo && window.Escritorio) {
+    try { const r = await Escritorio.abrirProyecto(recuperado.ruta); if (r && !r.cancelado) { Folio.cargar(r.datos.proyecto, r.ruta, Folio.conPrefijo(r.datos.recursos || {}), r.datos.originales || {}); Folio.guardadoDisco = new Date(); setTimeout(() => App.aviso(`Abrí «${Folio.p.titulo || 'tu libro'}» tal como se guardó en ${recuperado.discoMasNuevo.equipo}, que es más reciente que lo que quedó en este computador.`, { ms: 9000 }), 1500); Folio.avisoEnUso(r.enUso); recuperado = null; } }
+    catch (e) { console.error(e); }
+  }
   if (recuperado && recuperado.proyecto && recuperado.proyecto.bloques && recuperado.proyecto.bloques.length) {
     Folio.cargar(recuperado.proyecto, recuperado.ruta || null, recuperado.recursos || {});
     Folio.sucio = !!recuperado.ruta; // la copia automática puede tener cambios posteriores al último guardado en disco
+    Folio.avisoEnUso(recuperado.enUso);
   }
   await document.fonts.ready;
   App.cabecera(); App.camino(); App.pintar();

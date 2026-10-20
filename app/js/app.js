@@ -158,7 +158,25 @@
     if (a === 'modelo') window.Asistente && Asistente.ventana();
     if (a === 'herramientas') window.HerrLocal && HerrLocal.ventana();
     if (a === 'actualizar') buscarActualizacion();
+    if (a === 'carpeta-trabajo') carpetaTrabajo();
   });
+  // carpeta de trabajo: los proyectos, el perfil y el archivo ampliado en una carpeta que ven tus computadores
+  async function carpetaTrabajo() {
+    const e = await Escritorio.trabajo.estado();
+    const v = await App.modal({ titulo: 'Carpeta de trabajo', ancho: 640,
+      cuerpo: `<p>Si trabajas en más de un computador, elige en cada uno la misma carpeta (por ejemplo, una carpeta de Google Drive). Ahí quedan tus proyectos, el perfil de la editorial con sus tipografías y paletas, y las láminas que traigas de Commons. El modelo de texto y las herramientas se quedan en cada equipo.</p>
+        ${e.carpeta ? `<p>Este computador (<b>${esc(e.equipo)}</b>) usa <b>${esc(e.carpeta)}</b>.</p>` : e.elegida ? `<p class="mal">Este computador tiene elegida <b>${esc(e.elegida)}</b>, pero ahora no la encuentro (¿Drive está abierto?). Mientras tanto Folio trabaja con lo de este equipo.</p>` : '<p>Ahora todo se guarda solo en este computador.</p>'}
+        <p class="nota">Si un libro está abierto en el otro computador, Folio te avisa. Si alguien lo guardó allá después de que lo abriste acá, te pregunta antes de pisarlo. La carpeta la sincroniza tu programa de Drive, no Folio.</p>`,
+      botones: [{ texto: 'Cerrar', valor: null }, ...(e.elegida ? [{ texto: 'Dejar de usarla', valor: 'dejar' }] : []), { texto: e.elegida ? 'Elegir otra carpeta' : 'Elegir la carpeta', taco: true, valor: 'elegir' }] });
+    if (!v) return;
+    const r = v === 'dejar' ? await Escritorio.trabajo.dejar() : await Escritorio.trabajo.elegir();
+    if (!r || r.cancelado) return;
+    await Perfil.cargar(); try { Tipografias.registrarCSS(); } catch {}
+    ARCHIVO.extra.slice().forEach(l => ARCHIVO.quitarExtra(l.id)); await ARCHIVO.cargarExtra();
+    App.aviso(r.carpeta ? (r.usoPerfilExistente ? 'Listo. Encontré el perfil que dejó tu otro computador y lo estoy usando.' : 'Listo. Copié tu perfil a la carpeta; desde ahora tus libros nuevos se guardan en Proyectos.') : 'Listo. Este computador vuelve a guardar todo localmente, con una copia de tu perfil.', { ms: 8000 });
+    App.refrescar();
+  }
+  App.carpetaTrabajo = carpetaTrabajo;
   // solo cuando lo pides: pregunta a GitHub si hay una versión nueva y abre la página de descarga
   async function buscarActualizacion() {
     App.aviso('Buscando una versión nueva…', { ms: 2500 });

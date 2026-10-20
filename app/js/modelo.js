@@ -129,11 +129,21 @@
       Folio.deshacer.push({ etiqueta: u.etiqueta, antes: JSON.stringify(Folio.p) });
       Folio.p = JSON.parse(u.antes); Folio.sucio = true; programarAutoguardado(); Folio.avisar('rehacer'); return u.etiqueta;
     },
-    cargar(p, ruta = null, recursos = {}, originales = {}) { Folio.p = normalizar(p); Folio.ruta = ruta; Folio.recursos = recursos || {}; Folio.originales = originales || {}; Folio.deshacer = []; Folio.rehacer = []; Folio.sucio = false; Folio.avisar('cargar'); },
+    cargar(p, ruta = null, recursos = {}, originales = {}) { Folio.p = normalizar(p); Folio.ruta = ruta; Folio.recursos = recursos || {}; Folio.originales = originales || {}; Folio.deshacer = []; Folio.rehacer = []; Folio.sucio = false; Folio.avisar('cargar'); if (!ruta && window.Escritorio && Escritorio.soltarProyecto) Escritorio.soltarProyecto().catch(() => {}); },
+    conPrefijo: r => conPrefijo(r),
+    avisoEnUso(u) { if (u && window.App) App.aviso(`Ojo: este libro está abierto en ${u.equipo} desde ${new Date(u.desde).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}. Si lo editas en los dos lados, al guardar Folio te preguntará qué hacer.`, { ms: 10000 }); },
     nuevoProyecto() { const p = normalizar(null); if (window.Perfil) Perfil.aplicar(p); Folio.cargar(p); },
     async guardar(como = false) {
       if (!window.Escritorio) { descargarJSON(); return { ruta: 'descarga' }; }
-      const r = await Escritorio.guardarProyecto(Folio.ruta, { proyecto: Folio.p, recursos: soloB64(Folio.recursos), originales: Folio.originales }, como);
+      const datos = { proyecto: Folio.p, recursos: soloB64(Folio.recursos), originales: Folio.originales };
+      let r = await Escritorio.guardarProyecto(Folio.ruta, datos, como);
+      if (r && r.conflicto) {
+        // otro computador guardó este libro después de que lo abriste aquí
+        const c = r.conflicto, cuando = new Date(c.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' });
+        const v = await App.modal({ titulo: 'Este libro cambió en otro lado', cuerpo: `<p>${c.mismo ? 'El archivo' : `En <b>${App.esc(c.equipo)}</b> se`} guardó una versión de «${App.esc(Folio.p.titulo || 'este libro')}» el ${cuando}, después de que lo abriste aquí.</p><p>Si guardas encima, esa versión queda solo en el archivo .bak. Lo más seguro es guardar lo tuyo como copia y comparar después.</p>`, botones: [{ texto: 'Cancelar', valor: null }, { texto: 'Guardar encima', valor: 'encima' }, { texto: 'Guardar como copia', taco: true, valor: 'copia' }] });
+        if (!v) return { cancelado: true };
+        r = v === 'encima' ? await Escritorio.guardarProyecto(Folio.ruta, datos, false, true) : await Escritorio.guardarProyecto(null, datos, true, false, `${Folio.p.titulo || 'libro'} (copia ${(await Escritorio.trabajo.estado()).equipo})`);
+      }
       if (r && !r.cancelado) { Folio.ruta = r.ruta; Folio.guardadoDisco = new Date(); Folio.sucio = false; Folio.avisar('guardado'); }
       return r;
     },
@@ -142,6 +152,7 @@
       const r = await Escritorio.abrirProyecto();
       if (!r || r.cancelado) return r;
       Folio.cargar(r.datos.proyecto, r.ruta, conPrefijo(r.datos.recursos || {}), r.datos.originales || {}); Folio.guardadoDisco = new Date();
+      Folio.avisoEnUso(r.enUso);
       return r;
     },
   };
