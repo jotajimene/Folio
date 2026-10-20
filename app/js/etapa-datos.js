@@ -5,12 +5,13 @@
   let pagina = 'portada';
   const PAGINAS = [
     { id: 'portada', nombre: 'Portadilla y portada', campos: [['titulo', 'Título', 1], ['subtitulo', 'Subtítulo'], ['autor', 'Autora o autor', 1], ['sello', 'Sello editorial'], ['ciudad', 'Ciudad'], ['anio', 'Año']] },
-    { id: 'creditos', nombre: 'Créditos', campos: [['edicion', 'Edición'], ['isbn', 'ISBN, si ya está asignado (Folio no lo tramita)', 0, 'ancho'], ['derechos', 'Derechos o licencia', 0, 'ancho'], ['correccion', 'Corrección'], ['diseno', 'Diseño y diagramación'], ['impresion', 'Impresión', 0, 'ancho']] },
+    { id: 'creditos', nombre: 'Créditos', campos: [['edicion', 'Edición'], ['isbn', 'ISBN, si ya está asignado (Folio no lo tramita)', 0, 'ancho'], ['derechos', 'Derechos o licencia', 0, 'ancho'], ['correccion', 'Corrección'], ['diseno', 'Diseño y diagramación'], ['imprenta', 'Impresión (taller o imprenta)', 0, 'ancho']] },
     { id: 'dedicatoria', nombre: 'Dedicatoria', campos: [['dedicatoria', 'Dedicatoria', 0, 'ancho area']] },
     { id: 'epigrafe', nombre: 'Epígrafe', campos: [['epigrafe', 'Epígrafe', 0, 'ancho area'], ['epigrafeAutor', 'De quién es', 0, 'ancho']] },
     { id: 'indice', nombre: 'Índice', campos: [] },
     { id: 'colofon', nombre: 'Colofón', campos: [['colofon', 'Colofón (si lo dejas vacío, Folio escribe uno con la tipografía y la fecha)', 0, 'ancho area']] },
-    { id: 'contra', nombre: 'Contracubierta', campos: [['contracubierta', 'Texto de la contracubierta', 0, 'ancho area grande']] },
+    { id: 'perfil', nombre: 'Perfil de la editorial', campos: [] },
+    { id: 'contra', nombre: 'Contracubierta y sinopsis', campos: [['contracubierta', 'Texto de la contracubierta', 0, 'ancho area grande'], ['sinopsis', 'Sinopsis (para el libro digital y fichas)', 0, 'ancho area']] },
   ];
   function faltan(pg) {
     const p = Folio.p;
@@ -29,7 +30,8 @@
     if (f) return `<span>falta${f > 1 ? 'n' : ''} ${f}</span>`;
     if (pg.id === 'dedicatoria' || pg.id === 'epigrafe') return `<span>${p[pg.id].trim() ? 'escrita' : 'opcional'}</span>`;
     if (pg.id === 'indice') return `<span>${p.indice ? (p.indicePos === 'inicio' ? 'al inicio' : 'al final') : 'sin índice'}</span>`;
-    if (pg.id === 'colofon') return `<span>${p.colofon.trim() ? 'propio' : 'automático'}</span>`;
+    if (pg.id === 'colofon') return `<span>${p.colofonActivo === false ? 'sin colofón' : p.colofon.trim() ? 'propio' : 'automático'}</span>`;
+    if (pg.id === 'perfil') return `<span>${Perfil.datos.sello ? esc(Perfil.datos.sello) : 'sin completar'}</span>`;
     if (pg.id === 'contra') return `<span>${p.contracubierta.trim() ? (p.contracubierta.trim().split(/\s+/).length + ' palabras') : 'vacía'}</span>`;
     return '<span>completa</span>';
   }
@@ -48,14 +50,26 @@
     else if (pagina === 'contra') interior = `<div class="hp-contra">${esc(p.contracubierta || 'Sin texto de contracubierta.').replace(/\n/g, '<br>')}</div>`;
     return `<div class="mesa-libro"><div class="hoja hoja-datos" style="aspect-ratio:${W}/${H};font-family:${f.texto}">${interior}</div></div><p class="nota" style="text-align:center">Aproximación con las tipografías de la colección ${esc(c.nombre)}. La página exacta se ve en Interior.</p>`;
   }
+  function formPerfil() {
+    const d = Perfil.datos;
+    const campo = (k, t, cl = '') => `<label class="campo ${cl}"><span>${t}</span><input data-pf="${k}" value="${esc(d[k] || '')}"></label>`;
+    return `<p class="nota">Estos datos valen para todos tus libros: se copian solos en cada libro nuevo. Cambiarlos aquí no altera los libros ya hechos.</p>
+      <div class="campos">${campo('sello', 'Nombre del sello')}${campo('ciudad', 'Ciudad')}${campo('derechos', 'Derechos o licencia por defecto', 'ancho')}${campo('correccion', 'Corrección')}${campo('diseno', 'Diseño y diagramación')}${campo('imprenta', 'Impresión (taller o imprenta)', 'ancho')}
+      <label class="campo ancho"><span>Colofón tipo (vacío: Folio lo escribe)</span><textarea data-pf="colofon" rows="3">${esc(d.colofon || '')}</textarea></label></div>
+      <div class="sub">Logo del sello</div><div class="fila-botones">${d.logo ? `<img src="${d.logo}" alt="" style="height:48px;border:1px solid var(--tinta);background:#fff;padding:3px">` : ''}<button class="boton chico" data-pr="logo">${d.logo ? 'Cambiar el logo' : 'Cargar el logo (PNG o SVG)'}</button>${d.logo ? '<button class="boton chico" data-pr="sin-logo">Quitarlo</button>' : ''}</div>
+      <div class="sub">Numeración de las colecciones</div><ul class="lista">${Folio.COLECCIONES.map(c => `<li>${esc(c.nombre)} <span>último: ${d.numeros[c.id] ? String(d.numeros[c.id]).padStart(2, '0') : '—'}</span></li>`).join('')}</ul>
+      <button class="boton" data-pr="aplicar" style="margin-top:10px">Copiar estos datos al libro actual</button>`;
+  }
   function form() {
     const p = Folio.p, pg = PAGINAS.find(x => x.id === pagina);
+    if (pagina === 'perfil') return formPerfil();
     if (pagina === 'indice') return `<div class="campos"><label class="campo ancho chequeo"><input type="checkbox" data-k="indice" ${p.indice ? 'checked' : ''}> <span>Incluir índice (se arma solo con los capítulos)</span></label><label class="campo"><span>Dónde</span><select data-k="indicePos"><option value="final" ${p.indicePos !== 'inicio' ? 'selected' : ''}>Al final del libro</option><option value="inicio" ${p.indicePos === 'inicio' ? 'selected' : ''}>Al inicio, tras los preliminares</option></select></label></div><p class="nota">Capítulos detectados: ${p.bloques.filter(b => b.tipo === 'h1').length}. Para marcar un capítulo, en Manuscrito cambia la glosa del bloque a «capítulo».</p>`;
-    return `<div class="campos">${pg.campos.map(([k, label, req, clase = '']) => {
+    const pre = pagina === 'colofon' ? `<label class="chequeo"><input type="checkbox" data-k="colofonActivo" ${p.colofonActivo !== false ? 'checked' : ''}> Incluir colofón (si lo apagas, el libro termina sin esa página)</label>` : '';
+    return pre + `<div class="campos">${pg.campos.map(([k, label, req, clase = '']) => {
       const area = clase.includes('area');
       const mal = (req && !String(p[k]).trim()) || (k === 'isbn' && p.isbn && isbnMal(p.isbn));
       return `<label class="campo ${clase.replace('area', '').replace('grande', '')} ${mal ? 'falta' : ''}"><span>${esc(label)}</span>${area ? `<textarea data-k="${k}" rows="${clase.includes('grande') ? 12 : 5}">${esc(p[k])}</textarea>` : `<input data-k="${k}" value="${esc(p[k])}">`}${k === 'isbn' && p.isbn && isbnMal(p.isbn) ? `<em class="error">${isbnMal(p.isbn)}</em>` : ''}</label>`;
-    }).join('')}</div>${pagina === 'creditos' ? `<p class="nota">Las procedencias de los grabados que uses se agregan solas a esta página.</p>` : ''}`;
+    }).join('')}</div>${pagina === 'contra' ? `<div class="fila-botones"><button class="boton chico" data-ia="contra">Borrador de contracubierta con el modelo local</button><button class="boton chico" data-ia="sinopsis">Borrador de sinopsis</button></div><p class="nota">El modelo corre en tu computador. Lo que escribe aparece en una ventana y solo entra aquí si eliges «Usar este texto».</p>` : ''}${pagina === 'creditos' ? `<p class="nota">Las procedencias de los grabados que uses se agregan solas a esta página.</p>` : ''}`;
   }
   function render() {
     const lista = `<ul class="lista">${PAGINAS.map(pg => `<li class="${pg.id === pagina ? 'on' : ''} ${faltan(pg) ? 'mal' : ''}" data-pagina="${pg.id}"><a>${pg.nombre}</a> ${estadoPagina(pg)}</li>`).join('')}</ul>`;
@@ -67,7 +81,17 @@
         panel('vista', 'Así queda', `${Folio.p.formato} a escala`, vista(), App.seguir(3, 'Componer el interior →')),
     };
   }
+  let tPerfil = null;
   function montar(m) {
+    m.addEventListener('input', e => { const k = e.target.dataset.pf; if (!k) return; Perfil.datos[k] = e.target.value; clearTimeout(tPerfil); tPerfil = setTimeout(() => Perfil.guardar(), 600); });
+    m.addEventListener('click', async e => {
+      const ia = e.target.closest('[data-ia]');
+      if (ia) { const campo = ia.dataset.ia === 'contra' ? 'contracubierta' : 'sinopsis'; const t = await Asistente.borrador(campo === 'contracubierta' ? 'Borrador de contracubierta' : 'Borrador de sinopsis', al => (campo === 'contracubierta' ? Asistente.contracubierta : Asistente.sinopsis)(Folio.p, al)).catch(() => null); if (t) { Folio.cambiar('dato:' + campo, p => { p[campo] = t; }); App.refrescar(); } return; }
+      const b = e.target.closest('[data-pr]'); if (!b) return;
+      if (b.dataset.pr === 'logo') { const inp = document.getElementById('entrada-imagen'); inp.value = ''; inp.accept = '.png,.svg,.jpg,.jpeg,.webp'; inp.onchange = async () => { const f = inp.files[0]; if (!f) return; Perfil.datos.logo = await App.leerDataURL(f); await Perfil.guardar(); App.refrescar(); }; inp.click(); }
+      if (b.dataset.pr === 'sin-logo') { Perfil.datos.logo = null; await Perfil.guardar(); App.refrescar(); }
+      if (b.dataset.pr === 'aplicar') { const d = Perfil.datos; Folio.cambiar('dato:perfil', p => { for (const k of ['sello', 'ciudad', 'derechos', 'correccion', 'diseno', 'imprenta', 'colofon']) if (d[k]) p[k] = d[k]; }); App.aviso('Datos del perfil copiados al libro.'); App.refrescar(); }
+    });
     m.addEventListener('click', e => { const li = e.target.closest('[data-pagina]'); if (li) { pagina = li.dataset.pagina; App.refrescar(); } });
     const cambio = e => {
       const k = e.target.dataset.k; if (!k) return;

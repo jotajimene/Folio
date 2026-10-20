@@ -13,6 +13,21 @@
   .pagedjs_page.marcada{box-shadow:0 0 0 1px #1b1612,0 0 0 5px #a3321e}
   .pagedjs_page::after{content:attr(data-page-number);position:absolute;bottom:-20px;left:0;right:0;text-align:center;font:italic 12px Fell,serif;color:#4a4036}
   .pagedjs_page{position:relative}
+  [data-b],[data-il]{cursor:pointer}
+  [data-b]:hover,[data-il]:hover{outline:1px dashed rgba(163,50,30,.6);outline-offset:2px}
+  .elegido{outline:2px solid #a3321e !important;outline-offset:2px;background:rgba(163,50,30,.06)}
+  body.hojear{padding:0;overflow:hidden;background:#2b2520;height:100vh}
+  body.hojear .pagedjs_pages{width:auto;display:block;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(var(--k,1));zoom:1 !important;perspective:2400px}
+  body.hojear .pagedjs_page{position:absolute;top:calc(var(--pagedjs-height) / -2);margin:0;box-shadow:0 10px 40px rgba(0,0,0,.45);cursor:pointer}
+  body.hojear .pagedjs_page.izq{left:calc(var(--pagedjs-width) * -1);margin:0}
+  body.hojear .pagedjs_page.der{left:0;margin:0}
+  body.hojear .pagedjs_page::after{display:none}
+  body.hojear .pagedjs_first_page{margin-left:0}
+  .vuelta-adelante{transform-origin:0 50%;animation:vuelta-a .55s cubic-bezier(.3,.7,.3,1)}
+  .vuelta-atras{transform-origin:100% 50%;animation:vuelta-b .55s cubic-bezier(.3,.7,.3,1)}
+  @keyframes vuelta-a{from{transform:rotateY(70deg);filter:brightness(.7)}to{transform:none}}
+  @keyframes vuelta-b{from{transform:rotateY(-70deg);filter:brightness(.7)}to{transform:none}}
+  [data-b]:hover{outline:none}
   #estado{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:italic 20px Fell,serif;color:#1b1612;pointer-events:none}
 </style>
 <script src="vendor/herramientas.js"></script>
@@ -37,8 +52,9 @@
         const r = await Paginar(document.getElementById('libro'), m.proyecto, m.recursos || {});
         document.getElementById('estado').remove(); listo = true;
         const pg = document.querySelector('.pagedjs_page');
+        if (m.modo === 'hojear') { hojear(); parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones, blancas: r.blancas }, zoom: 1 }, location.origin); return; }
         zoom = (m.zoom === 'ajustar' || !m.zoom) && pg ? Math.max(.3, Math.min(1.2, (innerWidth - 48) / (2 * pg.offsetWidth))) : m.zoom; aplicarZoom();
-        parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones }, zoom }, location.origin);
+        parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones, blancas: r.blancas }, zoom }, location.origin);
       } catch (err) { console.error(err); parent.postMessage({ tipo: 'error', error: String(err && err.message || err) }, location.origin); }
     }
     if (m.tipo === 'zoom') { zoom = m.k; aplicarZoom(); }
@@ -48,7 +64,38 @@
       if (pg) { pg.classList.add('marcada'); pg.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     }
   });
-  document.addEventListener('click', e => { const pg = e.target.closest('.pagedjs_page'); if (pg) parent.postMessage({ tipo: 'pagina', pagina: +pg.dataset.pageNumber }, location.origin); });
+  // clic en el libro: elegir un bloque o un grabado para cambiarlo desde la mesa
+  // modo hojear: una doble página a la vez, con vuelta de hoja
+  let pliegos = [], ip = 0;
+  function hojear() {
+    document.body.classList.add('hojear');
+    const pags = [...document.querySelectorAll('.pagedjs_page')];
+    pliegos = [[null, pags[0]]]; for (let i = 1; i < pags.length; i += 2) pliegos.push([pags[i], pags[i + 1] || null]);
+    const pg = pags[0], k = Math.min((innerWidth - 80) / (2 * pg.offsetWidth), (innerHeight - 70) / pg.offsetHeight);
+    document.documentElement.style.setProperty('--k', k);
+    mostrar(0, 0);
+    addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === ' ') mostrar(ip + 1, 1); if (e.key === 'ArrowLeft') mostrar(ip - 1, -1); if (e.key === 'Escape') parent.postMessage({ tipo: 'cerrar-hojear' }, location.origin); });
+  }
+  function mostrar(i, dir) {
+    if (i < 0 || i >= pliegos.length) return;
+    ip = i;
+    document.querySelectorAll('.pagedjs_page').forEach(p => { p.classList.remove('izq', 'der', 'vuelta-adelante', 'vuelta-atras'); p.style.display = 'none'; });
+    const [a, b] = pliegos[i];
+    if (a) { a.style.display = ''; a.classList.add('izq'); if (dir < 0) a.classList.add('vuelta-atras'); }
+    if (b) { b.style.display = ''; b.classList.add('der'); if (dir > 0) b.classList.add('vuelta-adelante'); }
+    parent.postMessage({ tipo: 'hoja', i, total: pliegos.length }, location.origin);
+  }
+  addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.tipo === 'pasar') mostrar(ip + e.data.d, e.data.d); });
+  document.addEventListener('click', e => {
+    if (document.body.classList.contains('hojear')) { mostrar(ip + (e.clientX > innerWidth / 2 ? 1 : -1), e.clientX > innerWidth / 2 ? 1 : -1); return; }
+    const pg = e.target.closest('.pagedjs_page'); if (!pg) return;
+    const b = e.target.closest('[data-b]'), il = e.target.closest('[data-il]');
+    document.querySelectorAll('.elegido').forEach(x => x.classList.remove('elegido'));
+    if (il && il.dataset.il) { document.querySelectorAll(`[data-il="${il.dataset.il}"]`).forEach(x => x.classList.add('elegido')); parent.postMessage({ tipo: 'grabado', id: il.dataset.il, pagina: +pg.dataset.pageNumber }, location.origin); return; }
+    if (b) { document.querySelectorAll(`[data-b="${b.dataset.b}"]`).forEach(x => x.classList.add('elegido')); parent.postMessage({ tipo: 'bloque', id: b.dataset.b, pagina: +pg.dataset.pageNumber }, location.origin); return; }
+    parent.postMessage({ tipo: 'pagina', pagina: +pg.dataset.pageNumber }, location.origin);
+  });
+  addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.tipo === 'marcar') { document.querySelectorAll('.elegido').forEach(x => x.classList.remove('elegido')); document.querySelectorAll(`[data-b="${e.data.id}"]`).forEach(x => x.classList.add('elegido')); const x = document.querySelector(`[data-b="${e.data.id}"]`); if (x) x.scrollIntoView({ block: 'center' }); } });
   parent.postMessage({ tipo: 'vista-lista' }, location.origin);
 })();
 </script>

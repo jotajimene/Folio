@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const { esc, panel } = App;
-  const TIPOS = { h1: 'capítulo', h2: 'subtítulo', p: 'párrafo', verso: 'verso', cita: 'cita', separador: 'separador' };
+  const TIPOS = { h1: 'capítulo', h2: 'subtítulo', p: 'párrafo', verso: 'verso', cita: 'cita', separador: 'separador', seccion: 'sección (librojuego)' };
   let sel = null, editando = null;
 
   const EJEMPLO = `# La casa de las horas
@@ -24,8 +24,39 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
 
 ¿Qué cosa? pregunté. Que hora es?`;
 
-  function bloquesDesde(lista) {
-    return lista.map(b => ({ id: Folio.uid(), tipo: { h1: 'h1', h2: 'h2', poem: 'verso', p: 'p' }[b.kind] || 'p', texto: b.text, runs: b.runs && b.runs.some(r => r.bold || r.italic) ? b.runs.map(r => ({ text: r.text, ...(r.italic ? { italic: true } : {}), ...(r.bold ? { bold: true } : {}) })) : null }));
+  const limpiarRuns = runs => runs && runs.some(r => r.bold || r.italic) ? runs.map(r => ({ text: r.text, ...(r.italic ? { italic: true } : {}), ...(r.bold ? { bold: true } : {}) })) : null;
+  // ¿Parece un poemario? Muchos párrafos cortos de una línea, separados por líneas en blanco
+  function esPoemario(lista) {
+    const llenos = lista.filter(b => b.kind !== 'vacio' && b.kind !== 'h1' && b.kind !== 'h2');
+    if (llenos.length < 6) return false;
+    const cortos = llenos.filter(b => b.kind === 'poem' || (b.text.length <= 75 && !/\n/.test(b.text)));
+    return cortos.length / llenos.length >= 0.6;
+  }
+  // Agrupa versos sueltos en estrofas: las líneas en blanco del original separan estrofas
+  function agruparEstrofas(lista) {
+    const out = []; let buf = [];
+    const cerrar = () => {
+      if (!buf.length) return;
+      const solo = buf.length === 1 ? buf[0] : null;
+      if (solo && solo.text.length < 60 && ((solo.runs && solo.runs.length && solo.runs.every(r => r.bold || !r.text.trim())) || (/\p{Lu}/u.test(solo.text) && solo.text === solo.text.toUpperCase()))) { out.push({ ...solo, kind: 'h1' }); buf = []; return; }
+      const runs = []; buf.forEach((x, i) => { if (i) runs.push({ text: '\n' }); runs.push(...(x.runs && x.runs.length ? x.runs : [{ text: x.text }])); });
+      out.push({ kind: 'verso', text: buf.map(x => x.text).join('\n'), runs, notas: buf.flatMap(x => x.notas || []) });
+      buf = [];
+    };
+    for (const x of lista) {
+      if (x.kind === 'vacio') { cerrar(); continue; }
+      if (x.kind === 'p' && x.text.length <= 90) { buf.push(x); continue; }
+      cerrar();
+      out.push(x.kind === 'poem' ? { ...x, kind: 'verso' } : x);
+    }
+    cerrar();
+    return out;
+  }
+  function bloquesDesde(lista, info = {}) {
+    let l = lista;
+    info.poemario = esPoemario(lista);
+    if (info.poemario) l = agruparEstrofas(lista);
+    return l.filter(b => b.kind !== 'vacio').map(b => ({ id: Folio.uid(), tipo: { h1: 'h1', h2: 'h2', poem: 'verso', verso: 'verso', cita: 'cita', p: 'p' }[b.kind] || 'p', texto: b.text, runs: limpiarRuns(b.runs), ...(b.notas && b.notas.length ? { notas: b.notas.slice() } : {}) }));
   }
 
   // ---------- importación ----------
@@ -37,14 +68,15 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     prog.then(v => { if (v === 'cancelar') ctl.abort(); });
     try {
       const r = await FolioImport.extract([...archivos], { signal: ctl.signal, autoOCR: true, forceOCR: ocr, language: 'spa', progress: (t, v) => { const pt = capa.querySelector('.progreso-texto'), b = capa.querySelector('.barra i'); if (pt) pt.textContent = t; if (b) b.style.width = Math.round((v || 0) * 100) + '%'; } });
-      const nuevos = bloquesDesde(r.blocks);
+      const info = {}; const nuevos = bloquesDesde(r.blocks, info);
       for (const f of archivos) if (f.size < 25 * 1024 * 1024) Folio.originales[f.name] = (await App.leerDataURL(f)).replace(/^data:[^,]*,/, '');
-      Folio.cambiar('importar', p => {
+      Folio.cambiar('importar', p => { if (modo !== 'anadir') Perfil.aplicar(p);
         if (modo === 'anadir') { p.bloques.push(...nuevos); p.original.push(...nuevos.map(b => ({ ...b }))); }
         else { p.bloques = nuevos; p.original = nuevos.map(b => ({ ...b })); p.ilustraciones = []; p.revision = { decididas: [], ignorar: [], diccionario: p.revision.diccionario || [] }; }
         const previo = modo === 'anadir' && p.origen ? p.origen : { archivos: [], avisos: [], informes: [] };
         p.origen = { archivos: [...previo.archivos, ...[...archivos].map(f => ({ nombre: f.name, bytes: f.size, fecha: new Date().toISOString() }))], avisos: [...previo.avisos, ...r.warnings], informes: [...previo.informes, ...r.reports] };
         if (!p.titulo) { const h = nuevos.find(b => b.tipo === 'h1'); p.titulo = h ? h.texto : archivos[0].name.replace(/\.[^.]+$/, ''); }
+        if (info.poemario && modo !== 'anadir') { p.tipo = 'poesia'; const t = Folio.TIPOS_LIBRO.poesia; p.ajustes.alineacion = t.alineacion; p.ajustes.sangria = t.sangria; p.ajustes.entreParrafos = t.entreParrafos; p.origen.avisos.push('Parece un poemario: agrupé los versos en estrofas usando las líneas en blanco del original. Revisa que los títulos de los poemas estén marcados como «capítulo».'); }
       });
       if (cerrar) cerrar('ok');
       App.aviso(`${nuevos.length} bloques importados.`);
@@ -62,7 +94,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     const t = await App.modal({ titulo: 'Pegar texto', ancho: 720, cuerpo: `<p class="nota">Separa párrafos con una línea en blanco. Una línea que empieza con # es un capítulo; con ##, un subtítulo.</p><textarea class="area" rows="16" placeholder="Pega aquí tu texto"></textarea>`, botones: [{ texto: 'Cancelar', valor: null }, { texto: 'Usar este texto', taco: true, valor: c => c.querySelector('textarea').value }] });
     if (!t || !t.trim()) return;
     const nuevos = bloquesDesde(FolioImport.textBlocks(t));
-    Folio.cambiar('importar', p => {
+    Folio.cambiar('importar', p => { if (modo !== 'anadir') Perfil.aplicar(p);
       if (modo === 'anadir') { p.bloques.push(...nuevos); p.original.push(...nuevos.map(b => ({ ...b }))); }
       else { p.bloques = nuevos; p.original = nuevos.map(b => ({ ...b })); p.ilustraciones = []; }
       p.origen = { archivos: [...((modo === 'anadir' && p.origen?.archivos) || []), { nombre: 'Texto pegado', bytes: t.length, fecha: new Date().toISOString() }], avisos: (modo === 'anadir' && p.origen?.avisos) || [], informes: [] };
@@ -71,7 +103,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
   }
   function ejemplo() {
     const nuevos = bloquesDesde(FolioImport.textBlocks(EJEMPLO));
-    Folio.cambiar('importar', p => { p.bloques = nuevos; p.original = nuevos.map(b => ({ ...b })); p.origen = { archivos: [{ nombre: 'Ejemplo de Folio', bytes: EJEMPLO.length, fecha: new Date().toISOString() }], avisos: ['Texto de ejemplo con errores a propósito, para probar la revisión.'], informes: [] }; if (!p.titulo) p.titulo = 'La casa de las horas'; if (!p.autor) p.autor = 'Autora de ejemplo'; });
+    Folio.cambiar('importar', p => { Perfil.aplicar(p); p.bloques = nuevos; p.original = nuevos.map(b => ({ ...b })); p.origen = { archivos: [{ nombre: 'Ejemplo de Folio', bytes: EJEMPLO.length, fecha: new Date().toISOString() }], avisos: ['Texto de ejemplo con errores a propósito, para probar la revisión.'], informes: [] }; if (!p.titulo) p.titulo = 'La casa de las horas'; if (!p.autor) p.autor = 'Autora de ejemplo'; });
   }
   // arrastrar y soltar en toda la ventana mientras estás en esta etapa
   addEventListener('dragover', e => { if (App.actual === 0) { e.preventDefault(); document.body.classList.add('soltando'); } });
@@ -85,7 +117,9 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
   // ---------- edición ----------
   function htmlBloque(b) {
     if (b.tipo === 'separador') return '⁂';
-    const g = t => esc(t).replace(/\n/g, '<br>');
+    if (b.tipo === 'seccion') return '§ ' + esc(b.texto);
+    let n = 0; const notas = b.notas || [];
+    const g = t => esc(t).replace(/\n/g, '<br>').replace(/\uE000/g, () => { const i = n++; return `<sup class="llamada" contenteditable="false" data-nota="${i}" title="${esc(notas[i] || '')}">${i + 1}</sup>`; });
     if (b.runs && b.runs.length) return b.runs.map(r => { let h = g(r.text); if (r.italic) h = `<i>${h}</i>`; if (r.bold) h = `<b>${h}</b>`; return h; }).join('');
     return g(b.texto);
   }
@@ -95,6 +129,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     (function rec(n, fmt) {
       for (const c of n.childNodes) {
         if (c.nodeType === 3) runs.push({ text: c.nodeValue.replace(/ /g, ' '), ...fmt });
+        else if (c.nodeName === 'SUP' && c.dataset && c.dataset.nota != null) runs.push({ text: '\uE000', ...fmt });
         else if (c.nodeName === 'BR') runs.push({ text: '\n', ...fmt });
         else if (c.nodeType === 1) {
           const f = { ...fmt }; if (/^(I|EM)$/.test(c.nodeName) || c.style.fontStyle === 'italic') f.italic = true; if (/^(B|STRONG)$/.test(c.nodeName) || +c.style.fontWeight >= 600) f.bold = true;
@@ -123,9 +158,11 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     const b = Folio.p.bloques[i];
     if (!guardar) { el.innerHTML = htmlBloque(b); return; }
     const runs = leerRuns(el), texto = runs.map(r => r.text).join('');
+    const quedan = [...el.querySelectorAll('sup[data-nota]')].map(x => +x.dataset.nota);
+    const notasNuevas = (b.notas || []).length ? quedan.map(k => b.notas[k]).filter(x => x != null) : null;
     const conFormato = runs.some(r => r.italic || r.bold);
     if (texto === b.texto && JSON.stringify(conFormato ? runs : null) === JSON.stringify(b.runs && b.runs.some(r => r.italic || r.bold) ? b.runs : null)) return;
-    Folio.cambiar('texto:editar', p => { const x = p.bloques[i]; x.texto = texto; x.runs = conFormato ? runs : null; });
+    Folio.cambiar('texto:editar', p => { const x = p.bloques[i]; x.texto = texto; x.runs = conFormato ? runs : null; if (notasNuevas) { if (notasNuevas.length) x.notas = notasNuevas; else delete x.notas; } });
   }
   function posicionCursor(el) {
     const s = getSelection(); if (!s.rangeCount) return -1;
@@ -133,6 +170,30 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     const tmp = document.createElement('div'); tmp.appendChild(r.cloneContents()); return leerRuns(tmp).map(x => x.text).join('').length;
   }
 
+  function unirVerso(p, i) {
+    const a = p.bloques[i], b = p.bloques[i + 1]; if (!b) return;
+    const ra = a.runs && a.runs.length ? a.runs : [{ text: a.texto }], rb = b.runs && b.runs.length ? b.runs : [{ text: b.texto }];
+    const runs = [...ra, { text: '\n' }, ...rb];
+    a.texto = a.texto + '\n' + b.texto; a.runs = runs.some(r => r.italic || r.bold) ? runs : null; a.tipo = 'verso';
+    if (b.notas) a.notas = [...(a.notas || []), ...b.notas];
+    p.ilustraciones = (p.ilustraciones || []).map(il => il.despuesDe === b.id ? { ...il, despuesDe: a.id } : il);
+    p.bloques.splice(i + 1, 1);
+  }
+  async function proponerTitulos(id) {
+    const B = Folio.p.bloques, i = B.findIndex(x => x.id === id); let z = i + 1; while (z < B.length && B[z].tipo !== 'h1') z++;
+    const texto = B.slice(i + 1, z).map(x => x.texto).join('\n\n');
+    App.aviso('El modelo local está leyendo el capítulo…', { ms: 3000 });
+    let lista; try { lista = await Asistente.titulos(texto); } catch (e) { if (e.message !== 'sin-modelo') App.aviso('No se pudo: ' + e.message, { tipo: 'mal' }); return; }
+    if (!lista.length) return App.aviso('El modelo no propuso títulos.');
+    const t = await App.modal({ titulo: 'Títulos posibles', cuerpo: `<p class="nota">Propuestas del modelo local. Elige una para reemplazar «${esc(B[i].texto)}», o cierra para dejarlo como está.</p><div class="pila">${lista.map((x, k) => `<button class="boton" data-t="${k}">${esc(x)}</button>`).join('')}</div>`, botones: [{ texto: 'Dejarlo como está', valor: null }], alAbrir: (m, ctx) => m.addEventListener('click', ev => { const b = ev.target.closest('[data-t]'); if (b) ctx.cerrar(lista[+b.dataset.t]); }) });
+    if (t) Folio.cambiar('texto:editar', p => { const x = p.bloques.find(y => y.id === id); x.texto = t; x.runs = null; });
+  }
+  async function editarNotas(id) {
+    const b = Folio.p.bloques.find(x => x.id === id); const notas = b.notas || [];
+    const r = await App.modal({ titulo: 'Notas al pie de este bloque', ancho: 680, cuerpo: `${notas.length ? notas.map((n, i) => `<label class="campo"><span>Nota ${i + 1}</span><textarea class="area" rows="3" data-n="${i}">${esc(n)}</textarea></label>`).join('') : '<p class="nota">Este bloque no tiene notas.</p>'}<label class="campo"><span>Agregar una nota nueva al final del bloque</span><textarea class="area" rows="3" data-nueva></textarea></label><p class="nota">Para que la llamada vaya en otro lugar, edita el bloque: la llamada (el número) se puede mover cortándola y pegándola. Si la borras, la nota se elimina.</p>`, botones: [{ texto: 'Cancelar', valor: null }, { texto: 'Guardar', taco: true, valor: c => ({ notas: [...c.querySelectorAll('[data-n]')].map(t => t.value), nueva: c.querySelector('[data-nueva]').value.trim() }) }] });
+    if (!r) return;
+    Folio.cambiar('texto:notas', p => { const x = p.bloques.find(y => y.id === id); x.notas = r.notas.slice(); if (r.nueva) { x.notas.push(r.nueva); x.texto += '\uE000'; if (x.runs) x.runs.push({ text: '\uE000' }); } if (!x.notas.length) delete x.notas; });
+  }
   function cambiarTipo(id, boton) {
     const menu = document.createElement('div'); menu.className = 'menu-tipos';
     menu.innerHTML = Object.entries(TIPOS).map(([k, v]) => `<button data-t="${k}">${v}</button>`).join('');
@@ -149,22 +210,26 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     if (r === 'volver') Folio.cambiar('texto:editar', p => { const x = p.bloques.find(y => y.id === id); x.texto = o.texto; x.runs = o.runs ? JSON.parse(JSON.stringify(o.runs)) : null; });
   }
 
+  function herrHTML(i) {
+    const p = Folio.p, b = p.bloques[i], ult = i === p.bloques.length - 1;
+    return `<div class="herr"><button class="boton chico" data-m="editar">Editar</button><button class="boton chico" data-m="unir" ${ult ? 'disabled' : ''}>Unir con el siguiente</button><button class="boton chico" data-m="unir-verso" ${ult ? 'disabled' : ''} title="Une con el siguiente como un verso más de la misma estrofa">Unir como verso</button><button class="boton chico" data-m="dividir" title="Edita el bloque, pon el cursor donde quieras cortar y pulsa aquí">Dividir en el cursor</button><button class="boton chico" data-m="notas">Notas al pie${b && b.notas && b.notas.length ? ' (' + b.notas.length + ')' : ''}</button>${b && b.tipo === 'h1' ? '<button class="boton chico" data-m="titulos">Proponer títulos</button>' : ''}<button class="boton chico" data-m="original">Ver el original</button><button class="boton chico" data-m="grabado">Poner un grabado aquí</button><button class="boton chico" data-m="escuchar">Escuchar desde aquí</button><button class="boton chico" data-m="al-indice" title="Selecciona una palabra o un nombre y pulsa aquí">Selección al índice analítico</button><button class="boton chico" data-m="eliminar">Eliminar</button></div>`;
+  }
   // ---------- vistas ----------
   function puerta() {
     const esc2 = (window.BESTIARIO || []).filter(f => f.rol === 'escena'); const e = esc2[(Math.random() * esc2.length) | 0] || {};
-    return { cols: '1fr', html: panel('puerta', 'La puerta del manuscrito', 'nada cambia sin tu permiso', `<div class="vacio"><figure class="marco-escena"><img src="${e.src || ''}" alt="" title="${esc(e.ficha || '')}"></figure><h2>Trae tu manuscrito</h2><p>Arrástralo aquí: Word, PDF, OpenDocument, RTF, texto, Markdown, HTML o fotos de páginas.</p><div><button class="boton taco" data-m="elegir">Elegir archivo</button> <button class="boton" data-m="escaneo">Leer páginas escaneadas</button> <button class="boton" data-m="pegar">Pegar texto</button> <button class="boton" data-m="abrir">Abrir un proyecto</button></div><p class="nota" style="margin-top:14px"><button class="enlace" data-m="ejemplo">o prueba con un texto de ejemplo</button></p></div>`, '', 'texto-panel') };
+    return { cols: '1fr', html: panel('puerta', 'La puerta del manuscrito', 'nada cambia sin tu permiso', `<div class="vacio"><figure class="marco-escena"><img src="${e.src || ''}" alt="" title="${esc(e.ficha || '')}"></figure><h2>Trae tu manuscrito</h2><p>Arrástralo aquí: Word, PDF, OpenDocument, RTF, texto, Markdown, HTML o fotos de páginas.</p><div><button class="boton taco" data-m="elegir">Elegir archivo</button> <button class="boton" data-m="escaneo">Leer páginas escaneadas</button> <button class="boton" data-m="pegar">Pegar texto</button> <button class="boton" data-m="abrir">Abrir un proyecto</button> <button class="boton" data-m="fotolibro">Hacer un fotolibro</button></div><p class="nota" style="margin-top:14px"><button class="enlace" data-m="ejemplo">o prueba con un texto de ejemplo</button></p>${Estanteria.mini()}</div>`, '', 'texto-panel') };
   }
   function render() {
     const p = Folio.p;
     if (!p.bloques.length) return puerta();
     const secciones = []; let actual = null;
-    p.bloques.forEach((b, i) => { if (b.tipo === 'h1' || b.tipo === 'h2' || !actual) { actual = { id: b.id, t: b.tipo === 'h1' || b.tipo === 'h2' ? b.texto : '(inicio)', nivel: b.tipo, n: 0 }; secciones.push(actual); } actual.n++; });
+    p.bloques.forEach((b, i) => { const enc = b.tipo === 'h1' || b.tipo === 'h2' || b.tipo === 'seccion'; if (enc || !actual) { actual = { id: b.id, t: enc ? (b.tipo === 'seccion' ? '§ ' + b.texto : b.texto) : '(inicio)', nivel: b.tipo === 'h1' ? 'h1' : 'h2', n: 0 }; secciones.push(actual); } actual.n++; });
     const palabras = p.bloques.reduce((a, b) => a + (b.texto.match(/\S+/g) || []).length, 0);
     const ilus = {}; for (const il of p.ilustraciones || []) (ilus[il.despuesDe] = ilus[il.despuesDe] || []).push(il);
     const texto = `<div class="manuscrito">${p.bloques.map((b, i) => `
       <div class="bloque t-${b.tipo}${sel === b.id ? ' sel' : ''}" data-id="${b.id}"><button class="glosa" data-m="tipo" title="Cambiar la función del bloque">${TIPOS[b.tipo] || b.tipo}</button><div class="contenido">${htmlBloque(b)}</div>
-      ${sel === b.id ? `<div class="herr"><button class="boton chico" data-m="editar">Editar</button><button class="boton chico" data-m="unir" ${i === p.bloques.length - 1 ? 'disabled' : ''}>Unir con el siguiente</button><button class="boton chico" data-m="dividir" title="Edita el bloque, pon el cursor donde quieras cortar y pulsa aquí">Dividir en el cursor</button><button class="boton chico" data-m="original">Ver el original</button><button class="boton chico" data-m="grabado">Poner un grabado aquí</button><button class="boton chico" data-m="eliminar">Eliminar</button></div>` : ''}</div>
-      ${(ilus[b.id] || []).map(il => `<figure class="ilus-man"><img src="${il.lamina ? ARCHIVO.mini(il.lamina) : ''}" alt=""><figcaption>${esc(il.pie || 'Grabado ' + (il.lamina || ''))} · ${({ pagina: 'página completa', media: 'media página', vineta: 'viñeta' })[il.modo] || ''}</figcaption></figure>`).join('')}`).join('')}</div>`;
+      ${sel === b.id ? `${herrHTML(i)}` : ''}</div>
+      ${(ilus[b.id] || []).map(il => `<figure class="ilus-man"><img src="${App.miniIl(il)}" alt=""><figcaption>${esc(il.pie || 'Grabado ' + (il.lamina || ''))} · ${(App.MODOS_IL[il.modo] || '').toLowerCase()}</figcaption></figure>`).join('')}`).join('')}</div>`;
     const o = p.origen || { archivos: [], avisos: [], informes: [] };
     const ocrBaja = (o.informes || []).filter(r => r.method === 'OCR' && r.confidence < 75);
     return {
@@ -174,6 +239,8 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
         panel('origen', 'Origen', esc((o.archivos[0] || {}).nombre || ''), `<div class="ficha">${o.archivos.map(a => `<p>${esc(a.nombre)} <span class="dim">· ${new Date(a.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</span></p>`).join('')}<p class="dim">El original queda guardado dentro del proyecto.</p>
           ${o.avisos.length || ocrBaja.length ? `<div class="sub">Avisos de la importación</div><ul class="avisos">${o.avisos.map(a => `<li>${esc(a)}</li>`).join('')}${ocrBaja.map(r => `<li>OCR p. ${r.page}: confianza ${r.confidence} %</li>`).join('')}</ul>` : ''}
           <div class="sub">Tipo de libro</div><div class="fila-botones">${Object.entries(Folio.TIPOS_LIBRO).map(([k, t]) => `<button class="boton chico ${p.tipo === k ? 'taco' : ''}" data-tipo-libro="${k}">${t.nombre}</button>`).join('')}</div>
+          <div class="sub">Versiones</div>${Versiones.lista().length ? `<ul class="lista">${Versiones.lista().slice(0, 8).map(v => `<li data-version="${v.id}"><a>${esc(v.nombre)}</a> <span>${new Date(v.fecha).toLocaleDateString('es-CL')}</span></li>`).join('')}</ul>` : '<p class="nota">Guarda un estado con nombre para comparar o volver después.</p>'}<button class="boton chico" data-m="version">Guardar una versión</button>
+          <div class="sub">Herramientas</div><div class="fila-botones"><button class="boton chico" data-m="exportar-word">Enviar a corrección (.docx)</button><button class="boton chico" data-m="importar-word">Traer la corrección</button><button class="boton chico" data-m="indice-analitico">Índice analítico</button>${Folio.p.tipo === 'librojuego' ? '<button class="boton chico" data-m="librojuego">Secciones del librojuego</button>' : ''}</div>
           <div class="pila"><button class="boton" data-m="anadir">Añadir otro archivo al final</button><button class="boton" data-m="pegar-anadir">Pegar texto al final</button><button class="boton" data-m="reemplazar">Reemplazar el manuscrito…</button><button class="boton" data-m="exportar">Exportar el texto (.txt)</button></div></div>`, App.seguir(1, 'Revisar el texto →')),
     };
   }
@@ -191,6 +258,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
           case 'pegar-anadir': return pegar('anadir');
           case 'abrir': return App.abrir();
           case 'ejemplo': return ejemplo();
+          case 'fotolibro': { const lista = await Imagenes.agregarVarias(); if (!lista.length) return; Folio.cambiar('importar', p => { Perfil.aplicar(p); const h = { id: Folio.uid(), tipo: 'h1', texto: p.titulo || 'Fotolibro', runs: null }; p.bloques = [h]; p.original = [{ ...h }]; p.tipo = 'ilustrado'; p.titulo = p.titulo || 'Fotolibro'; p.ilustraciones = lista.map(im => ({ id: Folio.uid(), recurso: im.nombre, despuesDe: h.id, modo: 'sangre', pie: '' })); p.origen = { archivos: [{ nombre: lista.length + ' imágenes', bytes: 0, fecha: new Date().toISOString() }], avisos: ['Fotolibro: ordena la secuencia y elige cómo va cada imagen en Interior.'], informes: [] }; }); return App.ir(3); }
           case 'anadir': return elegirArchivo({ modo: 'anadir' });
           case 'reemplazar': if (await App.confirmar('Reemplazar el manuscrito borra los bloques actuales, sus correcciones y las ilustraciones colocadas. Puedes deshacerlo con Ctrl+Z.', 'Elegir el archivo nuevo')) elegirArchivo({}); return;
           case 'exportar': return App.descargar((Folio.p.titulo || 'texto') + '.txt', Folio.p.bloques.map(x => (x.tipo === 'h1' ? '# ' : x.tipo === 'h2' ? '## ' : '') + x.texto).join('\n\n'));
@@ -198,6 +266,16 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
           case 'editar': return editar(id);
           case 'original': return verOriginal(id);
           case 'grabado': return Archivo.abrir({ modo: 'insertar', despuesDe: id });
+          case 'unir-verso': { const i = Folio.p.bloques.findIndex(x => x.id === id); terminar(true); return Folio.cambiar('texto:unir', p => unirVerso(p, i)); }
+          case 'notas': return editarNotas(id);
+          case 'escuchar': return Voz.leer(id);
+          case 'al-indice': return IndiceAnalitico.agregarSeleccion();
+          case 'version': return Versiones.pedirNombre();
+          case 'exportar-word': return Corrector.exportar();
+          case 'importar-word': return Corrector.importar();
+          case 'indice-analitico': return IndiceAnalitico.ventana();
+          case 'librojuego': return Librojuego.ventana();
+          case 'titulos': return proponerTitulos(id);
           case 'unir': { const i = Folio.p.bloques.findIndex(x => x.id === id); terminar(true); return Folio.cambiar('texto:unir', p => Folio.texto.unir(p, i)); }
           case 'eliminar': { const i = Folio.p.bloques.findIndex(x => x.id === id); sel = null; Folio.cambiar('texto:eliminar', p => { p.bloques.splice(i, 1); p.ilustraciones = (p.ilustraciones || []).map(il => il.despuesDe === id ? { ...il, despuesDe: (p.bloques[i - 1] || p.bloques[0] || {}).id } : il); }); return App.aviso('Bloque eliminado.', { accion: { texto: 'Deshacer', hacer: () => Folio.deshacerUltimo() } }); }
           case 'dividir': {
@@ -212,6 +290,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
       }
       const tl = e.target.closest('[data-tipo-libro]');
       if (tl) return Folio.cambiar('tipo-libro', p => { p.tipo = tl.dataset.tipoLibro; const t = Folio.TIPOS_LIBRO[p.tipo]; p.ajustes.alineacion = t.alineacion; p.ajustes.sangria = t.sangria; p.ajustes.entreParrafos = t.entreParrafos; });
+      const ve = e.target.closest('[data-version]'); if (ve) return Versiones.ver(ve.dataset.version);
       const s = e.target.closest('[data-ir-bloque]');
       if (s) { const el = m.querySelector(`.bloque[data-id="${s.dataset.irBloque}"]`); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
       if (bloque && bloque.dataset.id !== sel && !e.target.closest('.herr')) { if (editando && editando !== bloque.dataset.id) terminar(true); sel = bloque.dataset.id; marcarSel(m); }
@@ -230,7 +309,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     const b = m.querySelector(`.bloque[data-id="${sel}"]`); if (!b) return;
     b.classList.add('sel');
     const i = Folio.p.bloques.findIndex(x => x.id === sel);
-    b.insertAdjacentHTML('beforeend', `<div class="herr"><button class="boton chico" data-m="editar">Editar</button><button class="boton chico" data-m="unir" ${i === Folio.p.bloques.length - 1 ? 'disabled' : ''}>Unir con el siguiente</button><button class="boton chico" data-m="dividir" title="Edita el bloque, pon el cursor donde quieras cortar y pulsa aquí">Dividir en el cursor</button><button class="boton chico" data-m="original">Ver el original</button><button class="boton chico" data-m="grabado">Poner un grabado aquí</button><button class="boton chico" data-m="eliminar">Eliminar</button></div>`);
+    b.insertAdjacentHTML('beforeend', herrHTML(i));
   }
 
   App.registrar({
@@ -239,6 +318,6 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     render, montar,
     alCambiar(motivo) { if (motivo === 'importar' || motivo === 'cargar') { sel = null; } },
     salir() { terminar(true); },
-    importar, ejemplo,
+    importar, ejemplo, htmlBloque, leerRuns,
   });
 })();

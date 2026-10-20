@@ -22,14 +22,14 @@
       const destino = document.getElementById('libro');
       if (t.tipo === 'cubierta') {
         await ARCHIVO.cargar();
-        const r = await Cubiertas.imprimible(t.proyecto, { modo: t.modo || 'frente', recursos: t.recursos || {}, paginas: t.paginas, sangrado: t.sangrado ?? 3 });
+        const r = await Cubiertas.imprimible(t.proyecto, { modo: t.modo || 'frente', recursos: t.recursos || {}, paginas: t.paginas, sangrado: t.sangrado ?? 3, logo: t.logo || null, marcas: t.marcas });
         const st = document.createElement('style'); st.textContent = r.css; document.head.appendChild(st);
         destino.innerHTML = r.html;
         await document.fonts.ready;
         await Promise.all([...destino.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(res => { i.onload = i.onerror = res; })));
         window.Impresion.listo({ paginas: 1, mm: r.mm });
       } else {
-        const r = await Paginar(destino, t.proyecto, t.recursos || {});
+        const r = await Paginar(destino, t.proyecto, t.recursos || {}, t.opciones || {});
         window.Impresion.listo({ paginas: r.paginas, avisos: r.avisos });
       }
     } catch (e) { console.error(e); window.Impresion.listo({ error: String(e && e.message || e) }); }

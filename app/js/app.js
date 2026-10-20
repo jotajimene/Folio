@@ -38,22 +38,33 @@
       $$('.mesa [data-zona] .cuerpo').forEach(c => { const v = pos[c.parentElement.dataset.zona]; if (v) c.scrollTop = v; });
     },
     async ir(i, { sinPrensa = false, forzar = false } = {}) {
-      if (App.ocupado || i < 0 || i >= App.etapas.length || (i === App.actual && !forzar)) return;
+      if (i < 0 || i >= App.etapas.length || (i === App.actual && !forzar)) return;
+      // si hay una transición en curso, se recuerda el destino y se va al terminar
+      if (App.ocupado) { App.pendienteIr = { i, sinPrensa, forzar }; return; }
       App.ocupado = true;
-      const anterior = App.etapas[App.actual];
-      if (anterior && anterior.salir) anterior.salir();
-      const m = $('.mesa');
-      if (!sinPrensa && !quieto) {
-        $$('.criatura').forEach(c => c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' }));
-        m.classList.add('sale'); $('.cenefa').classList.add('rueda'); $('.prensa').classList.add('baja');
-        await new Promise(r => setTimeout(r, 240));
+      try {
+        const anterior = App.etapas[App.actual];
+        try { if (anterior && anterior.salir) anterior.salir(); } catch (e) { console.error(e); }
+        const m = $('.mesa');
+        if (!sinPrensa && !quieto) {
+          $$('.criatura').forEach(c => c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' }));
+          m.classList.add('sale'); $('.cenefa').classList.add('rueda'); $('.prensa').classList.add('baja');
+          await new Promise(r => setTimeout(r, 240));
+        }
+        App.actual = i; App.camino(); App.pintar();
+        const m2 = $('.mesa');
+        m2.classList.remove('sale'); void m2.offsetWidth; m2.classList.add('entra');
+        await new Promise(r => setTimeout(r, quieto || sinPrensa ? 0 : 260));
+        // el bestiario nunca puede trabar la navegación
+        await Promise.race([window.Bestiario.poblar().catch(e => console.error(e)), new Promise(r => setTimeout(r, 2500))]);
+        await new Promise(r => setTimeout(r, quieto || sinPrensa ? 0 : 500));
+      } catch (e) { console.error(e); }
+      finally {
+        $('.mesa').classList.remove('entra'); $('.cenefa').classList.remove('rueda'); $('.prensa').classList.remove('baja');
+        App.ocupado = false;
+        const p = App.pendienteIr; App.pendienteIr = null;
+        if (p) App.ir(p.i, { sinPrensa: p.sinPrensa, forzar: p.forzar });
       }
-      App.actual = i; App.camino(); App.pintar();
-      const m2 = $('.mesa');
-      m2.classList.remove('sale'); void m2.offsetWidth; m2.classList.add('entra');
-      await new Promise(r => setTimeout(r, quieto || sinPrensa ? 0 : 260));
-      await window.Bestiario.poblar();
-      setTimeout(() => { $('.mesa').classList.remove('entra'); $('.cenefa').classList.remove('rueda'); $('.prensa').classList.remove('baja'); App.ocupado = false; }, quieto ? 0 : 500);
     },
 
     // ---------- avisos flotantes ----------
@@ -118,6 +129,7 @@
       case 'sortear': window.Bestiario.poblar(); break;
       case 'concentracion': { const on = document.body.classList.toggle('concentracion'); a.setAttribute('aria-pressed', on); break; }
       case 'abrir': App.abrir(); break;
+      case 'estanteria': window.Estanteria && Estanteria.abrir(); break;
       case 'guardar': App.guardar(false); break;
       case 'inicio': e.preventDefault(); App.ir(0); break;
     }
@@ -143,6 +155,7 @@
     if (a === 'deshacer') { if (editable(document.activeElement)) document.execCommand('undo'); else deshacer(); }
     if (a === 'rehacer') { if (editable(document.activeElement)) document.execCommand('redo'); else rehacer(); }
     if (a === 'archivo-grabados') window.Archivo && Archivo.abrir();
+    if (a === 'modelo') window.Asistente && Asistente.ventana();
   });
   async function nuevo() {
     if (Folio.p.bloques.length && Folio.sucio && !(await App.confirmar('¿Empezar un proyecto nuevo? Los cambios no guardados en disco quedan solo en la copia automática de hoy.', 'Empezar uno nuevo'))) return;
@@ -156,6 +169,7 @@
     App.cabecera();
     const e = App.etapas[App.actual];
     if (motivo === 'autoguardado' || motivo === 'guardado') return;
+    if (motivo === 'importar' && window.Perfil) Perfil.registrarNumero(Folio.p.coleccion, Folio.p.numero);
     if (e && e.alCambiar && e.alCambiar(motivo) === false) { App.camino(); return; }
     if (pendiente) return;
     pendiente = requestAnimationFrame(() => { pendiente = null; App.refrescar(); });
@@ -175,6 +189,8 @@
   App.descargar = (nombre, contenido, tipo = 'text/plain') => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([contenido], { type: tipo })); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
+  App.miniIl = il => il.lamina ? ARCHIVO.mini(il.lamina) : (il.recurso && Folio.recursos[il.recurso]) || '';
+  App.MODOS_IL = { pagina: 'Página completa', media: 'Media página', vineta: 'Viñeta', sangre: 'Página a sangre', doble: 'Doble página a sangre', blanca: 'Página en blanco (respiro)' };
   App.dinero = n => '$' + Math.round(n).toLocaleString('es-CL');
 
   window.App = App;

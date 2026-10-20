@@ -7,12 +7,12 @@
   const { esc } = App;
   const capa = document.querySelector('.archivo-capa');
   let op = {}, tipo = 'todas', fuente = '', busca = '', limite = 160, elegida = null, verPagina = false;
-  const TIPOS = { todas: 'Todo', figura: 'Figuras', escena: 'Escenas enmarcadas', orla: 'Orlas y cenefas', inicial: 'Iniciales' };
+  const TIPOS = { todas: 'Todo', figura: 'Figuras', hierbas: 'Plantas (herbario)', escena: 'Escenas enmarcadas', orla: 'Orlas y cenefas', inicial: 'Iniciales' };
 
   function lista() {
     const q = busca.trim().toLowerCase();
     return ARCHIVO.mezcla.filter(l => {
-      if (tipo !== 'todas' && l.tipo !== tipo) return false;
+      if (tipo === 'hierbas' ? !l.hb : (tipo !== 'todas' && l.tipo !== tipo)) return false;
       const pg = ARCHIVO.paginas[l.p] || {};
       if (fuente && pg.f !== fuente) return false;
       if (q && !(`${pg.f} ${pg.t} ${pg.a} ${pg.y}`.toLowerCase().includes(q))) return false;
@@ -26,7 +26,7 @@
     const bloques = Folio.p.bloques;
     const acciones = [];
     if (op.modo === 'cubierta') acciones.push(`<button class="boton taco" data-a="cubierta">Usar en la cubierta</button>`);
-    if (op.modo === 'insertar') acciones.push(`<label class="campo"><span>Ponerlo después de</span><select class="pos">${bloques.map((b, i) => `<option value="${b.id}" ${(op.despuesDe ? b.id === op.despuesDe : i === bloques.length - 1) ? 'selected' : ''}>${esc((b.tipo === 'h1' ? '§ ' : '') + b.texto.slice(0, 60))}</option>`).join('')}</select></label><label class="campo"><span>Cómo</span><select class="modo-il"><option value="media">Media página</option><option value="pagina">Página completa</option><option value="vineta">Viñeta</option></select></label><button class="boton taco" data-a="insertar" ${bloques.length ? '' : 'disabled'}>Poner en el libro</button>`);
+    if (op.modo === 'insertar') acciones.push(`<label class="campo"><span>Ponerlo después de</span><select class="pos">${bloques.map((b, i) => `<option value="${b.id}" ${(op.despuesDe ? b.id === op.despuesDe : i === bloques.length - 1) ? 'selected' : ''}>${esc((b.tipo === 'h1' ? '§ ' : '') + b.texto.slice(0, 60))}</option>`).join('')}</select></label><label class="campo"><span>Cómo</span><select class="modo-il"><option value="media">Media página</option><option value="pagina">Página completa</option><option value="vineta">Viñeta</option><option value="sangre">Página a sangre</option></select></label><button class="boton taco" data-a="insertar" ${bloques.length ? '' : 'disabled'}>Poner en el libro</button>`);
     if (!op.modo || op.modo === 'ver') acciones.push(`<button class="boton" data-a="cubierta">Usar en la cubierta</button>${bloques.length ? '<button class="boton" data-a="a-insertar">Poner en el libro…</button>' : ''}`);
     return `<div class="ar-imagen ${verPagina ? 'pagina' : ''}">${verPagina ? `<div class="ar-pag"><img src="${ARCHIVO.paginaSrc(l.p)}" alt="Página original"><i style="${caja}"></i></div>` : `<img src="${ARCHIVO.src(l.id)}" alt="">`}</div>
       <div class="fila-botones centrada"><button class="boton chico ${verPagina ? '' : 'taco'}" data-a="lamina">La lámina</button><button class="boton chico ${verPagina ? 'taco' : ''}" data-a="pagina">La página original</button></div>
@@ -41,7 +41,7 @@
       <div class="rotulo"><span>Archivo de grabados</span> <i>${ARCHIVO.laminas.length.toLocaleString('es-CL')} láminas de ${Object.keys(ARCHIVO.paginas).length.toLocaleString('es-CL')} páginas originales, todas de dominio público o con licencia libre</i><button class="cerrar" data-a="cerrar" aria-label="Cerrar">✕</button></div>
       <div class="ar-cuerpo">
         <aside class="ar-filtros"><input type="search" class="ar-busca" placeholder="Buscar por obra, autor, año…" value="${esc(busca)}">
-          <div class="sub">Tipo</div><ul class="lista">${Object.entries(TIPOS).map(([k, t]) => `<li class="${k === tipo ? 'on' : ''}" data-tipo="${k}"><a>${t}</a> <span>${k === 'todas' ? ARCHIVO.laminas.length : ARCHIVO.laminas.filter(l => l.tipo === k).length}</span></li>`).join('')}</ul>
+          <div class="sub">Tipo</div><ul class="lista">${Object.entries(TIPOS).map(([k, t]) => `<li class="${k === tipo ? 'on' : ''}" data-tipo="${k}"><a>${t}</a> <span>${k === 'todas' ? ARCHIVO.laminas.length : k === 'hierbas' ? ARCHIVO.laminas.filter(l => l.hb).length : ARCHIVO.laminas.filter(l => l.tipo === k).length}</span></li>`).join('')}</ul>
           <div class="sub">Fuente</div><ul class="lista fuentes"><li class="${!fuente ? 'on' : ''}" data-fuente=""><a>Todas</a></li>${ARCHIVO.fuentes.slice().sort((a, b) => (cuenta[b.nombre] || 0) - (cuenta[a.nombre] || 0)).map(f => `<li class="${fuente === f.nombre ? 'on' : ''}" data-fuente="${esc(f.nombre)}"><a>${esc(f.nombre)}</a> <span>${cuenta[f.nombre] || 0}</span></li>`).join('')}</ul></aside>
         <div class="ar-rejilla"><p class="nota">${L.length.toLocaleString('es-CL')} láminas${op.modo === 'insertar' ? ' · elige una para ponerla en el libro' : op.modo === 'cubierta' ? ' · elige una para la cubierta' : ''}</p><div class="ar-minis">${vis.map(l => `<button class="ar-mini ${l.id === elegida ? 'on' : ''}" data-id="${l.id}" title="${esc((ARCHIVO.paginas[l.p] || {}).f || '')}"><img src="${ARCHIVO.mini(l.id)}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>${L.length > limite ? `<button class="boton" data-a="mas" style="margin:14px auto;display:block">Mostrar más (${(L.length - limite).toLocaleString('es-CL')} restantes)</button>` : ''}</div>
         <aside class="ar-detalle">${ficha(elegida)}</aside>

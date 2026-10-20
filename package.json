@@ -1,12 +1,12 @@
 {
   "name": "folio",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Folio: del manuscrito al libro impreso. Funciona sin internet.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "herramientas": "esbuild build/entrada-herramientas.js --bundle --format=iife --outfile=app/vendor/herramientas.js --minify",
-    "prueba": "electron pruebas/e2e.js",
+    "prueba": "electron pruebas/e2e.js && electron pruebas/e2e2.js",
     "dist": "electron-builder --win portable nsis --x64"
   },
   "keywords": [],
@@ -17,6 +17,7 @@
     "dictionary-es": "^4.0.0",
     "hyphen": "^1.10.6",
     "jszip": "^3.10.1",
+    "node-llama-cpp": "^3.22.2",
     "nspell": "^2.1.5",
     "pagedjs": "^0.4.3",
     "pdf-lib": "^1.17.1",
@@ -36,9 +37,14 @@
       "main.js",
       "preload.js",
       "preload-imprimir.js",
+      "modelo-local.js",
+      "impresion.js",
       "app/**/*",
       "build/icono.png",
-      "package.json"
+      "package.json",
+      "!node_modules/@node-llama-cpp/*cuda*/**",
+      "!node_modules/@node-llama-cpp/*cuda*",
+      "!node_modules/node-llama-cpp/llama/**/*.{cpp,c,h,hpp,cu,metal}"
     ],
     "directories": {
       "output": "dist",

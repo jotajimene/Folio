@@ -156,60 +156,127 @@
       const k = Math.min(1, a.d / 220);
       let px = a.ux * lim * k, py = a.uy * lim * k * 0.7;
       if (v.dir < 0) px = -px;
-      o.p.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
+      o.p.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px)) scaleY(${v.cierre ?? 1})`;
     }
   }
-  function tick(dt, t) {
-    const g = geometria(), cerca = Date.now() - cursor.t < 4000;
+  // ---------- repertorio de acciones ----------
+  // cada criatura sortea qué hacer y cuándo; ninguna acción entra en las zonas de trabajo
+  const ACCIONES_MIRON = ['asomarse', 'mirar-alrededor', 'tiritar', 'estirarse', 'saludar', 'saltito', 'pasear', 'agacharse', 'inclinarse'];
+  const ACCIONES_CABEZA = ['bostezo', 'mirar-alrededor', 'hundirse', 'inclinarse', 'asomarse'];
+  function sortearAccion(v, t) {
+    const lista = v.tipo === 'cabeza' ? ACCIONES_CABEZA : ACCIONES_MIRON;
+    const a = lista[(Math.random() * lista.length) | 0];
+    const dur = { asomarse: azar(2, 4), 'mirar-alrededor': 2.4, tiritar: 1, estirarse: 2.2, saludar: 1.4, saltito: .7, pasear: azar(2.5, 5), agacharse: 1.6, inclinarse: 2, bostezo: 2.4, hundirse: 3 }[a] || 2;
+    v.accion = { a, t0: t, dur, dx: a === 'pasear' && v.panel ? azar(v.panel.left + 6, Math.max(v.panel.left + 6, v.panel.right - v.w - 6)) : 0, x0: v.x };
+    v.proxima = t + dur + azar(2.5, 8);
+  }
+  const campana = u => Math.sin(Math.PI * Math.max(0, Math.min(1, u)));
+  function efecto(v, t) {
+    const out = { sube: 0, rot: 0, sy: 1, y: 0, flip: 0 };
+    const ac = v.accion; if (!ac) return out;
+    const u = (t - ac.t0) / ac.dur;
+    if (u >= 1) { if (ac.a === 'pasear') v.x = ac.dx; v.accion = null; return out; }
+    switch (ac.a) {
+      case 'asomarse': out.sube = .35 * campana(u); break;
+      case 'mirar-alrededor': out.flip = u < .3 ? 0 : u < .62 ? 1 : 0; break;
+      case 'tiritar': out.rot = Math.sin(t * 60) * 2.2 * campana(u); break;
+      case 'estirarse': out.sy = 1 + .12 * campana(u); break;
+      case 'saludar': out.rot = Math.sin(u * Math.PI * 6) * 9 * campana(u); break;
+      case 'saltito': out.y = -Math.sin(Math.PI * u) * 16; out.sy = 1 + (u < .15 ? -.1 : u > .85 ? -.08 : .05); break;
+      case 'agacharse': out.sube = -.6 * campana(u * 1.4); break;
+      case 'inclinarse': out.rot = 12 * campana(u) * (v.dir || 1); break;
+      case 'bostezo': out.sy = 1 + .08 * campana(u); out.rot = -4 * campana(u); break;
+      case 'hundirse': out.sube = -.75 * campana(u); break;
+      case 'pasear': { const k = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; v.x = ac.x0 + (ac.dx - ac.x0) * k; v.el.style.left = v.x + 'px'; out.y = -Math.abs(Math.sin(t * 9)) * 3; v.dir = (ac.dx >= ac.x0 ? 1 : -1) * (v.mira === 'L' ? -1 : 1); break; }
+    }
+    return out;
+  }
+  let quietoDesde = performance.now() / 1000, sustos = [];
+  addEventListener('pointerdown', e => {
+    // un clic cerca asusta: los que están al lado saltan o se esconden
     for (const v of vivos) {
+      const r = v.el.getBoundingClientRect(); const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+      if (d < Math.max(140, r.width)) { v.susto = 1; if (v.tipo === 'libre') { v.huye = 2.2; v.ida = e.clientX < r.left + r.width / 2 ? 1 : -1; } }
+    }
+  }, { passive: true });
+
+  function tick(dt, t) {
+    const g = geometria(), cerca = Date.now() - cursor.t < 4000, dormido = (Date.now() - cursor.t) > 25000;
+    for (const v of vivos) {
+      v.susto = Math.max(0, (v.susto || 0) - dt * 1.6);
       if (v.tipo === 'miron' || v.tipo === 'cabeza') {
         v.espera -= dt;
+        if (v.proxima == null) v.proxima = t + azar(1, 6);
+        if (!v.accion && t > v.proxima && v.espera <= 0 && !dormido) sortearAccion(v, t);
+        const ef = efecto(v, t);
         const cx = v.x + v.w / 2, cy = v.base - v.asoma * v.sube + v.h * 0.18;
         const a = apuntar(v, cx, cy);
-        // timidez: si el cursor se acerca mucho, se esconde un poco y vuelve
-        const objetivo = v.espera > 0 ? 0 : (a.d < Math.max(90, v.w * 0.55) && v.tipo === 'miron' ? 0.25 : 1);
-        v.sube = suave(v.sube, objetivo, Math.min(1, dt * (objetivo < v.sube ? 6 : 1.6)));
-        // girar hacia el cursor (los de perfil se dan vuelta, con calma)
-        if (v.mira !== 'F' && cerca) {
+        // curiosidad: si el cursor se queda quieto cerca, se asoma un poco más
+        const curioso = cerca && a.d < 260 && (Date.now() - cursor.t) > 1200 ? .18 : 0;
+        let objetivo = v.espera > 0 ? 0 : (a.d < Math.max(90, v.w * 0.55) && v.tipo === 'miron' && (Date.now() - cursor.t) < 900 ? 0.25 : 1);
+        if (dormido) objetivo = v.tipo === 'cabeza' ? .7 : .55;
+        if (v.susto > .2) objetivo = v.tipo === 'cabeza' ? .3 : 0;
+        objetivo = Math.max(0, objetivo + ef.sube + (objetivo > .5 ? curioso : 0));
+        v.sube = suave(v.sube, objetivo, Math.min(1, dt * (objetivo < v.sube ? 7 : 1.6)));
+        if (v.mira !== 'F' && cerca && !(v.accion && v.accion.a === 'pasear')) {
           const quiere = (a.dx >= 0 ? 1 : -1) * (v.mira === 'L' ? -1 : 1);
           if (quiere !== v.dir) { v.giro = (v.giro || 0) + dt; if (v.giro > 0.6) { v.dir = -v.dir; v.giro = 0; v.salto = 1; } } else v.giro = 0;
         }
-        const incl = cerca ? Math.max(-6, Math.min(6, a.dx / 90)) * (v.tipo === 'cabeza' ? 0.6 : 1) : Math.sin(t * 0.6 + v.x) * 1.2;
+        const incl = dormido ? 7 * (v.dir || 1) : cerca ? Math.max(-6, Math.min(6, a.dx / 90)) * (v.tipo === 'cabeza' ? 0.6 : 1) : Math.sin(t * 0.6 + v.x) * 1.2;
         v.inc = suave(v.inc, incl, Math.min(1, dt * 3));
         v.salto = Math.max(0, (v.salto || 0) - dt * 4);
-        const resp = Math.sin(t * 1.3 + v.x * 0.01) * (v.tipo === 'cabeza' ? 3 : 1.5);
-        v.top = v.base - v.asoma * v.sube + resp - Math.sin(v.salto * Math.PI) * 6;
+        const resp = Math.sin(t * (dormido ? .7 : 1.3) + v.x * 0.01) * (v.tipo === 'cabeza' ? 3 : 1.5);
+        v.top = v.base - v.asoma * v.sube + resp - Math.sin(v.salto * Math.PI) * 6 + ef.y - (v.susto > .5 ? 10 * Math.sin(v.susto * Math.PI) : 0);
         v.el.style.top = v.top + 'px';
-        v.el.style.transform = `scaleX(${v.dir}) rotate(${v.inc * v.dir}deg)`;
+        const dir = ef.flip ? -v.dir : v.dir;
+        v.el.style.transform = `scaleX(${dir}) rotate(${(v.inc + ef.rot) * dir}deg) scaleY(${ef.sy})`;
         ojos(v);
-        // de vez en cuando se esconde del todo y reaparece en otro sitio del mismo panel
-        if (v.tipo === 'miron' && v.espera < -azar(14, 40) && Math.random() < dt * 0.15) { v.espera = azar(1.2, 3); v.x = azar(v.panel.left + 6, Math.max(v.panel.left + 6, v.panel.right - v.w - 6)); setTimeout(() => { v.el.style.left = v.x + 'px'; }, 500); }
+        parpadeo(v, t, dormido);
+        if (v.tipo === 'miron' && !v.accion && v.espera < -azar(14, 40) && Math.random() < dt * 0.15) { v.espera = azar(1.2, 3); v.x = azar(v.panel.left + 6, Math.max(v.panel.left + 6, v.panel.right - v.w - 6)); setTimeout(() => { v.el.style.left = v.x + 'px'; }, 500); }
       } else {
-        // libres: cruzan la pantalla
+        // libres: cruzan la pantalla, se detienen, se encuentran, huyen
         const c = v.carril;
         const a = apuntar(v, v.x + v.w / 2, v.y + v.h / 2);
         if (a.d < 110 && !v.huye) { v.huye = 1.4; v.ida = a.dx > 0 ? -1 : 1; }
         v.huye = Math.max(0, v.huye - dt);
-        if (v.pausa > 0) v.pausa -= dt; else if (Math.random() < dt * 0.08 && v.fig.mov === 'repta') v.pausa = azar(1, 3);
-        const vel = v.pausa > 0 && !v.huye ? 0 : v.vel * (v.huye ? 3.2 : 1);
+        if (v.pausa > 0) v.pausa -= dt; else if (Math.random() < dt * 0.08 && v.fig.mov !== 'vuela') v.pausa = azar(1, 3);
+        // encuentro con otro del mismo carril: se miran, saltan y se van cada uno por su lado
+        if (!v.encuentro && !v.huye) for (const o of vivos) if (o !== v && o.tipo === 'libre' && o.carril === c && !o.encuentro && Math.abs((o.x + o.w / 2) - (v.x + v.w / 2)) < (o.w + v.w) / 2 + 6 && o.ida !== v.ida) { v.encuentro = o.encuentro = 1.6; v.mirarA = o; o.mirarA = v; }
+        if (v.encuentro) { v.encuentro -= dt; if (v.encuentro <= 0) { v.encuentro = 0; v.ida = -v.ida; v.mirarA = null; } }
+        const parado = (v.pausa > 0 || v.encuentro > 0) && !v.huye;
+        if (dormido && v.fig.mov === 'repta') v.pausa = Math.max(v.pausa, .5);
+        const vel = parado ? 0 : v.vel * (v.huye ? 3.2 : 1);
         v.x += vel * v.ida * 60 * dt; v.fase += vel * dt * 9;
-        // mirar al caminar; en pausa, girar la cabeza hacia el cursor
-        const haciaDonde = v.pausa > 0 && !v.huye && cerca ? (a.dx >= 0 ? 1 : -1) : v.ida;
+        let haciaDonde = v.ida;
+        if (v.encuentro && v.mirarA) haciaDonde = v.mirarA.x > v.x ? 1 : -1;
+        else if (parado && cerca) haciaDonde = a.dx >= 0 ? 1 : -1;
         v.dir = haciaDonde * (v.mira === 'L' ? -1 : 1);
-        let y = c.y - v.h, rot = 0;
-        if (v.fig.mov === 'repta') { y -= Math.abs(Math.sin(v.fase)) * Math.min(3, v.h * .06) * (vel ? 1 : 0); rot = Math.sin(v.fase) * 2 * (vel ? 1 : 0); }
+        let y = c.y - v.h, rot = 0, sy = 1;
+        if (v.encuentro) { const u = 1.6 - v.encuentro; y -= Math.abs(Math.sin(u * 7)) * 8; }
+        if (v.fig.mov === 'repta') { y -= Math.abs(Math.sin(v.fase)) * Math.min(3, v.h * .06) * (vel ? 1 : 0); rot = Math.sin(v.fase) * 2 * (vel ? 1 : 0); if (!vel) sy = 1 + Math.sin(t * 1.4 + v.x) * .02; }
         if (v.fig.mov === 'nada') { y -= 4 + Math.sin(v.fase * 0.6) * 5; rot = Math.cos(v.fase * 0.6) * 6; }
-        if (v.fig.mov === 'salta') { const s = Math.abs(Math.sin(v.fase * 0.5)); y -= s * Math.min(g.franja - v.h - 4, 34); rot = (s - .5) * 8; }
-        if (v.fig.mov === 'vuela') { y = c.y - v.h - 8 - (Math.sin(v.fase * 0.3) * 0.5 + 0.5) * Math.max(0, g.franja - v.h - 20); rot = Math.sin(v.fase * 2.4) * 10; v.el.style.setProperty('--aleteo', Math.abs(Math.sin(v.fase * 3)).toFixed(2)); }
+        if (v.fig.mov === 'salta') { const s = Math.abs(Math.sin(v.fase * 0.5)); y -= s * Math.min(g.franja - v.h - 4, 34); rot = (s - .5) * 8; sy = s < .08 ? .9 : 1; }
+        if (v.fig.mov === 'vuela') {
+          y = c.y - v.h - 8 - (Math.sin(v.fase * 0.3) * 0.5 + 0.5) * Math.max(0, g.franja - v.h - 20); rot = Math.sin(v.fase * 2.4) * 10; sy = 0.75 + 0.25 * Math.abs(Math.sin(v.fase * 3));
+          // de vez en cuando, una vuelta en el aire
+          if (!v.rizo && Math.random() < dt * .05) v.rizo = 1; if (v.rizo) { v.rizo = Math.max(0, v.rizo - dt * .9); rot += (1 - v.rizo) * 360; }
+        }
+        if (v.susto > .3) y -= Math.sin(v.susto * Math.PI) * 14;
         v.y = y;
         v.el.style.left = v.x + 'px'; v.el.style.top = y + 'px';
-        v.el.style.transform = `scaleX(${v.dir}) rotate(${rot}deg)` + (v.fig.mov === 'vuela' ? ` scaleY(${0.75 + 0.25 * Math.abs(Math.sin(v.fase * 3))})` : '');
-        // al salir por un lado vuelve más tarde por el otro
+        v.el.style.transform = `scaleX(${v.dir}) rotate(${rot}deg) scaleY(${sy})`;
         if ((v.ida > 0 && v.x > innerWidth + 40) || (v.ida < 0 && v.x < -v.w - 40)) {
           v.ida = -v.ida; v.x = v.ida > 0 ? -v.w - azar(200, 900) : innerWidth + azar(200, 900);
         }
       }
     }
+  }
+  // parpadeo: las pupilas se cierran un instante (y casi del todo si duerme)
+  function parpadeo(v, t, dormido) {
+    if (!v.pupilas) return;
+    if (v.parpado == null || t > v.parpado + 6) v.parpado = t + azar(2, 6);
+    const u = t - v.parpado, cerrado = dormido ? .15 : (u > 0 && u < .16 ? Math.abs(Math.cos(u / .16 * Math.PI)) : 1);
+    v.cierre = Math.max(.08, cerrado);
   }
   function pintarTodo() {
     for (const v of vivos) {

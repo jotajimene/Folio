@@ -13,33 +13,42 @@
   // ---- colecciones: cada una es un sistema completo (interior + cubierta) ----
   // generador: cómo se construye la imagen de cubierta. paletas: [fondo, tinta, acento]
   const COLECCIONES = [
-    { id: 'bestiario', nombre: 'Bestiario', lema: 'Criaturas y prodigios', texto: 'Fell', titulos: 'Fell', generador: 'grabado',
-      descripcion: 'Un grabado del archivo, centrado y grande, sobre papel. La forma clásica.', paletas: [['#efe6d2', '#1b1612', '#a3321e'], ['#e9dfc6', '#2b2118', '#6b5a2e'], ['#1b1612', '#efe6d2', '#c9a24a']] },
-    { id: 'teselario', nombre: 'Teselario', lema: 'Repeticiones', texto: 'FPalatino', titulos: 'FGothic', generador: 'teselacion',
-      descripcion: 'Un fragmento de grabado reflejado hasta formar un tapiz. Título en una franja lisa.', paletas: [['#e7dcc4', '#2c3a4f', '#e7dcc4'], ['#d9c7a3', '#5a2a1e', '#f1e8d5'], ['#f2ece0', '#3d5a3a', '#f2ece0'], ['#c8d3c6', '#1c1c1c', '#f4efe6']] },
-    { id: 'archivo', nombre: 'Archivo', lema: 'Documentos y memoria', texto: 'FRoman', titulos: 'FMono', generador: 'foto',
-      descripcion: 'Una fotografía tuya tratada en semitono a dos tintas, con datos tipográficos como ficha.', paletas: [['#e8e4da', '#1d1d1b', '#d2462a'], ['#f0ead8', '#1f3a5f', '#f0ead8'], ['#e3e0d6', '#3a2e2a', '#c79a2b']] },
-    { id: 'umbral', nombre: 'Umbral', lema: 'Narrativa contemporánea', texto: 'FPalatino', titulos: 'FSans', generador: 'campos',
-      descripcion: 'Campos de color recortados y una criatura pequeña que los habita. Variable en cada libro.', paletas: [['#f3eee4', '#e2532d', '#24345c'], ['#f3eee4', '#2f6f5e', '#f2c14e'], ['#efe9df', '#7d3c98', '#e8a33d'], ['#f4f0e8', '#1f6fb2', '#e94e3c']] },
-    { id: 'friso', nombre: 'Friso', lema: 'Ensayo', texto: 'FBookman', titulos: 'FBookman', generador: 'cenefas',
-      descripcion: 'Bandas de ornamento grabado arriba y abajo; el título en el centro, sereno.', paletas: [['#efe6d2', '#1b1612', '#7a1f12'], ['#e6ecea', '#1b2a33', '#1b2a33'], ['#f1e4d0', '#4a2c1a', '#a46a2a']] },
-    { id: 'inicial', nombre: 'Inicial', lema: 'Poesía', texto: 'FSchool', titulos: 'Fraktur', generador: 'tipografica',
-      descripcion: 'La inicial del título, monumental, ocupa la cubierta. Sin imagen.', paletas: [['#f3ede1', '#a3321e', '#1b1612'], ['#1b1612', '#efe6d2', '#c9a24a'], ['#e9eef0', '#24345c', '#1b1612']] },
-    { id: 'fragmento', nombre: 'Fragmento', lema: 'Ficción breve', texto: 'FModern', titulos: 'FNarrow', generador: 'detalle',
-      descripcion: 'Un detalle ampliado de un grabado, a sangre, como visto con lupa.', paletas: [['#f0e9db', '#1b1612', '#1b1612'], ['#dfe7e2', '#253a33', '#253a33'], ['#f1dfd0', '#5c1f14', '#5c1f14']] },
-    { id: 'herbario', nombre: 'Herbario', lema: 'Crónicas y diarios', texto: 'FSchool', titulos: 'FPalatino', generador: 'reticula',
-      descripcion: 'Una retícula de nueve grabados del archivo, como lámina de herbario.', paletas: [['#efe6d2', '#33402c', '#8a3b22'], ['#f2efe6', '#1b1612', '#2f5a7a'], ['#e7ddc8', '#3b2a1e', '#3b2a1e']] },
-    { id: 'eco', nombre: 'Eco', lema: 'Experimentos', texto: 'FMono', titulos: 'FMono', generador: 'texto',
+    { id: 'bestiario', nombre: 'Bestiario', lema: 'Tinta y criaturas', texto: 'Fell', titulos: 'Fell', generador: 'grabado',
+      descripcion: 'Un grabado del archivo, centrado y grande, sobre papel, con doble filete. La línea clásica.', paletas: [['#efe6d2', '#1b1612', '#a3321e'], ['#e9dfc6', '#2b2118', '#6b5a2e'], ['#1b1612', '#efe6d2', '#c9a24a']] },
+    { id: 'teselario', nombre: 'Teselario', lema: 'Patrones que se repiten', texto: 'FPalatino', titulos: 'FGothic', generador: 'teselacion',
+      descripcion: 'Un fragmento de grabado hecho caleidoscopio: ocho espejos que lo vuelven tapiz. Título en una franja lisa.', paletas: [['#e7dcc4', '#2c3a4f', '#e7dcc4'], ['#d9c7a3', '#5a2a1e', '#f1e8d5'], ['#f2ece0', '#3d5a3a', '#f2ece0'], ['#c8d3c6', '#1c1c1c', '#f4efe6']] },
+    { id: 'archivo', nombre: 'Archivo', lema: 'Memoria en semitono', texto: 'FRoman', titulos: 'FMono', generador: 'foto',
+      descripcion: 'Una fotografía tuya (o un grabado) en semitono a dos tintas que corre por toda la tapa, con datos como ficha.', paletas: [['#e8e4da', '#1d1d1b', '#d2462a'], ['#f0ead8', '#1f3a5f', '#f0ead8'], ['#e3e0d6', '#3a2e2a', '#c79a2b']] },
+    { id: 'umbral', nombre: 'Umbral', lema: 'Color plano y recorte', texto: 'FPalatino', titulos: 'FSans', generador: 'umbral',
+      descripcion: 'Formas planas recortadas, pocos colores saturados y tipografía grande; a veces un grabado metido en una de las formas.', paletas: [['#f2c14e', '#1d3557', '#e63946'], ['#e9e3d5', '#e2532d', '#24345c'], ['#9ad1c7', '#1f2a44', '#f25c3b'], ['#f4a3b4', '#2a2a72', '#ffd23f'], ['#1f2a44', '#f2c14e', '#e2532d']] },
+    { id: 'friso', nombre: 'Friso', lema: 'Ornamento en bandas', texto: 'FBookman', titulos: 'FBookman', generador: 'cenefas',
+      descripcion: 'Una figura del archivo repetida en bandas arriba y abajo; el título en el centro, sereno.', paletas: [['#efe6d2', '#1b1612', '#7a1f12'], ['#e6ecea', '#1b2a33', '#1b2a33'], ['#f1e4d0', '#4a2c1a', '#a46a2a']] },
+    { id: 'fragmento', nombre: 'Fragmento', lema: 'Lo mínimo, ampliado', texto: 'FModern', titulos: 'FNarrow', generador: 'detalle',
+      descripcion: 'Un detalle de un grabado ampliado a sangre, como visto con lupa. Tú eliges el encuadre.', paletas: [['#f0e9db', '#1b1612', '#1b1612'], ['#dfe7e2', '#253a33', '#253a33'], ['#f1dfd0', '#5c1f14', '#5c1f14']] },
+    { id: 'herbario', nombre: 'Herbario', lema: 'Láminas botánicas', texto: 'FSchool', titulos: 'FPalatino', generador: 'reticula',
+      descripcion: 'Una retícula de nueve hierbas del archivo, como lámina de herbario.', paletas: [['#efe6d2', '#33402c', '#8a3b22'], ['#f2efe6', '#1b1612', '#2f5a7a'], ['#e7ddc8', '#3b2a1e', '#3b2a1e']] },
+    { id: 'eco', nombre: 'Eco', lema: 'La palabra como textura', texto: 'FMono', titulos: 'FMono', generador: 'texto',
       descripcion: 'El título repetido hasta volverse textura. Puramente tipográfica.', paletas: [['#f1efe8', '#1b1612', '#e2532d'], ['#1b1612', '#d9d4c7', '#e2532d'], ['#e8f0e9', '#1d4d3a', '#1d4d3a']] },
-    { id: 'constelacion', nombre: 'Constelación', lema: 'Ensayo visual', texto: 'FSans', titulos: 'FNarrow', generador: 'puntos',
+    { id: 'constelacion', nombre: 'Constelación', lema: 'Mapas de letras', texto: 'FSans', titulos: 'FNarrow', generador: 'puntos',
       descripcion: 'Una constelación generada desde las letras del título: puntos y trazos.', paletas: [['#1c2433', '#efe6d2', '#f2c14e'], ['#f2ede3', '#1b1612', '#a3321e'], ['#24345c', '#f3eee4', '#e2532d']] },
   ];
-
+  // biblioteca de paletas que sirve para cualquier colección: [fondo, tinta, acento]
+  const PALETAS = [
+    ['Papel y hollín', '#efe6d2', '#1b1612', '#a3321e'], ['Pergamino', '#e9dfc6', '#3b2a1e', '#8a3b22'], ['Noche y oro', '#1b1612', '#efe6d2', '#c9a24a'],
+    ['Índigo', '#e7e4da', '#24345c', '#d2462a'], ['Prusia', '#f0ead8', '#1f3a5f', '#e2a33d'], ['Bosque', '#eef0e6', '#2f4a32', '#b5542e'],
+    ['Musgo', '#d8dcc5', '#33402c', '#f2efe6'], ['Terracota', '#f1e4d0', '#5c1f14', '#d28a3c'], ['Ladrillo', '#e8d2c0', '#7a1f12', '#1b1612'],
+    ['Mostaza', '#f2c14e', '#1d3557', '#e63946'], ['Tomate', '#e2532d', '#f3eee4', '#1f2a44'], ['Menta', '#9ad1c7', '#1f2a44', '#f25c3b'],
+    ['Rosa chicle', '#f4a3b4', '#2a2a72', '#ffd23f'], ['Lavanda', '#d9d1ea', '#3c2a63', '#e2532d'], ['Cielo', '#cfe3ef', '#14324a', '#f2c14e'],
+    ['Limón', '#f4ee8b', '#1b1612', '#2f6f5e'], ['Mar profundo', '#173f4f', '#e8f0e9', '#f2a541'], ['Ciruela', '#3d1f3a', '#f1e4d0', '#e8a33d'],
+    ['Grafito', '#2b2b2b', '#e8e4da', '#d2462a'], ['Ceniza', '#d7d5cf', '#2b2b2b', '#2b2b2b'], ['Hueso', '#f4efe6', '#4a4036', '#4a4036'],
+    ['Óxido', '#c8673a', '#1b1612', '#f1e4d0'], ['Turquesa', '#1d7874', '#f3eee4', '#f2c14e'], ['Arcilla', '#dcc7b0', '#4a2c1a', '#2c3a4f'],
+  ];
   const TIPOS_LIBRO = {
     narrativa: { nombre: 'Narrativa', alineacion: 'justify', sangria: 1.2, entreParrafos: 0, verso: false },
     poesia: { nombre: 'Poesía', alineacion: 'left', sangria: 0, entreParrafos: 8, verso: true },
     ensayo: { nombre: 'Ensayo', alineacion: 'justify', sangria: 0, entreParrafos: 6, verso: false },
-    ilustrado: { nombre: 'Ilustrado', alineacion: 'left', sangria: 0, entreParrafos: 6, verso: false },
+    ilustrado: { nombre: 'Ilustrado o fotolibro', alineacion: 'left', sangria: 0, entreParrafos: 6, verso: false },
+    librojuego: { nombre: 'Librojuego', alineacion: 'justify', sangria: 1.2, entreParrafos: 0, verso: false },
   };
   const FORMATOS = { A5: [148, 210], A6: [105, 148], '13×20': [130, 200], '15×23': [150, 230], '17×24': [170, 240] };
   // límites únicos de cada ajuste: los usa la interfaz y la composición (nunca se normalizan en otro sitio)
@@ -54,14 +63,14 @@
     return {
       version: 2, id: uid(), creado: new Date().toISOString(),
       titulo: '', subtitulo: '', autor: '', sello: '', ciudad: '', anio: String(new Date().getFullYear()), edicion: 'Primera edición',
-      isbn: '', derechos: 'Todos los derechos reservados.', correccion: '', diseno: '', impresion: '', dedicatoria: '', epigrafe: '', epigrafeAutor: '', colofon: '',
-      indice: true, indicePos: 'final', contracubierta: '', composicion: null,
+      isbn: '', derechos: 'Todos los derechos reservados.', correccion: '', diseno: '', imprenta: '', dedicatoria: '', epigrafe: '', epigrafeAutor: '', colofon: '',
+      indice: true, indicePos: 'final', colofonActivo: true, contracubierta: '', sinopsis: '', composicion: null,
       bloques: [], original: [], origen: null,
       revision: { decididas: [], ignorar: [], diccionario: [] },
       coleccion: 'bestiario', numero: '01', tipo: 'narrativa', formato: 'A5',
-      ajustes: { cuerpo: 11, interlineado: 1.45, margenInterior: 20, margenExterior: 16, margenSuperior: 18, margenInferior: 22, sangria: 1.2, entreParrafos: 0, alineacion: 'justify', tituloCuerpo: 22, aireTitulo: 40, espaciado: 0, capituloDerecha: true, cabeceras: true, guionado: true, capitular: true, fuenteTexto: null, fuenteTitulos: null },
+      ajustes: { cuerpo: 11, interlineado: 1.45, margenInterior: 20, margenExterior: 16, margenSuperior: 18, margenInferior: 22, sangria: 1.2, entreParrafos: 0, alineacion: 'justify', tituloCuerpo: 22, aireTitulo: 40, espaciado: 0, capituloDerecha: true, saltoCapitulo: 'derecha', cabeceras: true, guionado: true, capitular: true, fuenteTexto: null, fuenteTitulos: null },
       ilustraciones: [],
-      cubierta: { semilla: 1, paleta: 0, imagen: null, foto: null, escalaTitulo: 1, solapas: false },
+      cubierta: { semilla: 1, paleta: 0, colores: null, imagen: null, foto: null, escalaTitulo: 1, solapas: false, recorte: null },
       impresion: { pliego: 16, papelGramaje: 80, grosorHoja: 0.1 },
       costo: { tirada: 50, papelHoja: 45, caraBN: 35, caraColor: 180, cubierta: 650, encuadernacion: 700, preparacion: 15000, otros: 0, merma: 8, margen: 40, comision: 0, recargo: 0 },
       historial: [],
@@ -77,7 +86,7 @@
     p.cubierta = Object.assign(nuevo().cubierta, p.cubierta || {});
     p.impresion = Object.assign(nuevo().impresion, p.impresion || {});
     p.costo = Object.assign(nuevo().costo, p.costo || {});
-    p.bloques = (p.bloques || []).map(b => ({ id: b.id || uid(), tipo: b.tipo || ({ h1: 'h1', h2: 'h2', poem: 'verso', p: 'p' }[b.kind] || 'p'), texto: b.texto ?? b.text ?? '', runs: b.runs || null }));
+    p.bloques = (p.bloques || []).map(b => { const { kind, text, ...resto } = b; return { ...resto, id: b.id || uid(), tipo: b.tipo || ({ h1: 'h1', h2: 'h2', poem: 'verso', p: 'p' }[kind] || 'p'), texto: b.texto ?? text ?? '', runs: b.runs || null }; });
     if (!p.original || !p.original.length) p.original = p.bloques.map(b => ({ ...b }));
     if (!COLECCIONES.find(c => c.id === p.coleccion)) p.coleccion = 'bestiario';
     return p;
@@ -86,7 +95,7 @@
   // ---- estado global con historial ----
   const oyentes = new Set();
   const Folio = {
-    COLECCIONES, FUENTES, TIPOS_LIBRO, FORMATOS, LIMITES, limitar, uid,
+    COLECCIONES, PALETAS, FUENTES, TIPOS_LIBRO, FORMATOS, LIMITES, limitar, uid,
     p: normalizar(null), ruta: null, recursos: {}, originales: {}, guardadoDisco: null, guardadoAuto: null, sucio: false,
     deshacer: [], rehacer: [],
     al(f) { oyentes.add(f); return () => oyentes.delete(f); },
@@ -115,7 +124,7 @@
       Folio.p = JSON.parse(u.antes); Folio.sucio = true; programarAutoguardado(); Folio.avisar('rehacer'); return u.etiqueta;
     },
     cargar(p, ruta = null, recursos = {}, originales = {}) { Folio.p = normalizar(p); Folio.ruta = ruta; Folio.recursos = recursos || {}; Folio.originales = originales || {}; Folio.deshacer = []; Folio.rehacer = []; Folio.sucio = false; Folio.avisar('cargar'); },
-    nuevoProyecto() { Folio.cargar(null); },
+    nuevoProyecto() { const p = normalizar(null); if (window.Perfil) Perfil.aplicar(p); Folio.cargar(p); },
     async guardar(como = false) {
       if (!window.Escritorio) { descargarJSON(); return { ruta: 'descarga' }; }
       const r = await Escritorio.guardarProyecto(Folio.ruta, { proyecto: Folio.p, recursos: soloB64(Folio.recursos), originales: Folio.originales }, como);

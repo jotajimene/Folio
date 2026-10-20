@@ -30,10 +30,52 @@
     constelacion: { capitular: null, sep: '· · ·', cabeceras: 'versalitas', filete: false },
   };
 
-  function enLinea(b, conGuion) {
-    const g = t => esc(conGuion ? guionar(t) : t).replace(/\n/g, '<br>');
-    if (b.runs && b.runs.length) return b.runs.map(r => { let h = g(r.text); if (r.italic) h = `<i>${h}</i>`; if (r.bold) h = `<b>${h}</b>`; return h; }).join('');
-    return g(b.texto);
+  // tramos con formato → HTML. Las notas al pie van marcadas en el texto con U+E000.
+  function tramos(b) { return b.runs && b.runs.length ? b.runs : [{ text: b.texto }]; }
+  // contexto de composición (librojuego e índice analítico); lo fija componer()
+  let CTX = { lj: null, ia: null };
+  function numerarLJ(p) {
+    const secs = p.bloques.filter(b => b.tipo === 'seccion').map(b => b.texto.trim());
+    if (!secs.length) return null;
+    let orden = secs.slice();
+    if (p.librojuego && p.librojuego.barajar) {
+      let s = (p.librojuego.semilla || 1) >>> 0; const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+      const resto = orden.slice(1); for (let i = resto.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [resto[i], resto[j]] = [resto[j], resto[i]]; }
+      orden = [orden[0], ...resto];
+    }
+    return new Map(orden.map((e, i) => [e, i + 1]));
+  }
+  const idSec = e => 'sec-' + e.toLowerCase().replace(/[^\p{L}\d]+/gu, '-');
+  function trozo(t, conGuion) {
+    // remisiones del librojuego: [[etiqueta]] → número
+    let out = '', i = 0; const re = /\[\[([^\]]+)\]\]/g; let m;
+    const normal = x => conGuion ? guionar(x) : x;
+    if (CTX.lj) while ((m = re.exec(t))) { out += marcarIA(normal(t.slice(i, m.index))); const n = CTX.lj.get(m[1].trim()); out += n ? `<a class="ref-sec" href="#${idSec(m[1].trim())}">${n}</a>` : `<span class="ref-falta">¿${esc(m[1])}?</span>`; i = m.index + m[0].length; }
+    return out + marcarIA(normal(t.slice(i)));
+  }
+  // términos del índice analítico: se envuelven para ubicar sus páginas después de componer
+  function marcarIA(t) {
+    if (!CTX.ia) return esc(t);
+    let out = '', i = 0, m; CTX.ia.re.lastIndex = 0;
+    const limpio = t.replace(/\u00AD/g, '');
+    if (limpio.length !== t.length) { // con guiones blandos: buscar sobre el texto limpio y mapear posiciones
+      const mapa = []; for (let k = 0; k < t.length; k++) if (t[k] !== '\u00AD') mapa.push(k); mapa.push(t.length);
+      while ((m = CTX.ia.re.exec(limpio))) { const a = mapa[m.index], z = mapa[m.index + m[0].length]; out += esc(t.slice(i, a)) + `<span class="ia" data-ia="${CTX.ia.indice(m[0])}">${esc(t.slice(a, z))}</span>`; i = z; }
+      return out + esc(t.slice(i));
+    }
+    while ((m = CTX.ia.re.exec(t))) { out += esc(t.slice(i, m.index)) + `<span class="ia" data-ia="${CTX.ia.indice(m[0])}">${esc(m[0])}</span>`; i = m.index + m[0].length; }
+    return out + esc(t.slice(i));
+  }
+  function enLinea(b, conGuion, estado = { n: 0 }) {
+    const notas = b.notas || [];
+    const g = t => trozo(t, conGuion).replace(/\n/g, '<br>').replace(/\uE000/g, () => { const n = notas[estado.n++]; return n ? `<span class="nota-pie">${esc(n)}</span>` : ''; });
+    return tramos(b).map(r => { let h = g(r.text); if (r.italic) h = `<i>${h}</i>`; if (r.bold) h = `<b>${h}</b>`; return h; }).join('');
+  }
+  // versos: cada línea en su caja, conservando cursivas y notas
+  function versos(b) {
+    const lineas = [[]], estado = { n: 0 };
+    for (const r of tramos(b)) r.text.split('\n').forEach((t, i) => { if (i) lineas.push([]); if (t) lineas[lineas.length - 1].push({ ...r, text: t }); });
+    return lineas.map(l => `<span class="v">${l.length ? enLinea({ runs: l, notas: b.notas }, false, estado) : '&nbsp;'}</span>`).join('');
   }
 
   // ---- páginas preliminares ----
@@ -54,7 +96,7 @@
     if (p.sello || p.ciudad) l.push(`<p>${[p.sello, p.ciudad].filter(Boolean).map(esc).join(' · ')}${p.anio ? ', ' + esc(p.anio) : ''}</p>`);
     if (p.edicion) l.push(`<p>${esc(p.edicion)}</p>`);
     if (p.isbn) l.push(`<p>ISBN: ${esc(p.isbn)}</p>`);
-    const resp = [['Corrección', p.correccion], ['Diseño y diagramación', p.diseno], ['Impresión', p.impresion]].filter(x => x[1]);
+    const resp = [['Corrección', p.correccion], ['Diseño y diagramación', p.diseno], ['Impresión', typeof p.imprenta === 'string' ? p.imprenta : '']].filter(x => x[1]);
     if (resp.length) l.push(`<p>${resp.map(([a, b]) => `${a}: ${esc(b)}`).join('<br>')}</p>`);
     const imgs = procedencias(p);
     if (imgs.length) l.push(`<p class="proc">Grabados: ${imgs.map(esc).join('; ')}.</p>`);
@@ -81,13 +123,15 @@
     for (const b of p.bloques) {
       if (b.tipo === 'h1' || !abierta) abrir();
       const id = 'b-' + b.id;
+      const extra = (b.saltoAntes ? ' salto' : '') + (b.pegado ? ' pegado' : '') + (b.entero ? ' entero' : '');
       switch (b.tipo) {
-        case 'h1': out.push(`<h1 class="titulo-cap" id="${id}">${enLinea(b, false)}</h1>`); primero = true; break;
-        case 'h2': out.push(`<h2 id="${id}">${enLinea(b, false)}</h2>`); primero = true; break;
-        case 'verso': out.push(`<div class="estrofa" id="${id}">${b.texto.split('\n').map(v => `<span class="v">${esc(v) || '&nbsp;'}</span>`).join('')}</div>`); primero = false; break;
-        case 'cita': out.push(`<blockquote id="${id}">${enLinea(b, conGuion)}</blockquote>`); primero = true; break;
-        case 'separador': out.push(`<p class="sep" id="${id}">${esc(opt.estilo.sep)}</p>`); primero = true; break;
-        default: out.push(`<p id="${id}" class="${primero ? 'primero' : ''}${primero && opt.estilo.capitular && p.ajustes.capitular !== false ? ' capitular' : ''}">${enLinea(b, conGuion)}</p>`); primero = false;
+        case 'h1': out.push(`<h1 class="titulo-cap${extra}" id="${id}" data-b="${b.id}">${enLinea(b, false)}</h1>`); primero = true; break;
+        case 'h2': out.push(`<h2 class="${extra}" id="${id}" data-b="${b.id}">${enLinea(b, false)}</h2>`); primero = true; break;
+        case 'verso': out.push(`<div class="estrofa${extra}" id="${id}" data-b="${b.id}">${versos(b)}</div>`); primero = false; break;
+        case 'cita': out.push(`<blockquote class="${extra}" id="${id}" data-b="${b.id}">${enLinea(b, conGuion)}</blockquote>`); primero = true; break;
+        case 'seccion': { const e = b.texto.trim(), n = CTX.lj ? CTX.lj.get(e) : '?'; out.push(`<h2 class="seccion-n${extra}" id="${idSec(e)}" data-b="${b.id}">${n}</h2>`); primero = true; break; }
+        case 'separador': out.push(`<p class="sep" id="${id}" data-b="${b.id}">${esc(opt.estilo.sep)}</p>`); primero = true; break;
+        default: out.push(`<p id="${id}" data-b="${b.id}" class="${primero ? 'primero' : ''}${primero && opt.estilo.capitular && p.ajustes.capitular !== false && p.tipo !== 'poesia' ? ' capitular' : ''}${extra}">${enLinea(b, conGuion)}</p>`); primero = false;
       }
       for (const il of ilus[b.id] || []) out.push(figura(il, opt));
     }
@@ -96,15 +140,34 @@
   }
   function figura(il, opt) {
     const src = il.lamina ? 'archivo/laminas/' + il.lamina + '.png' : (opt.recursos && opt.recursos[il.recurso]) || '';
-    return `<figure class="il il-${il.modo || 'media'}"><img src="${src}" alt=""${il.lamina ? ` data-lamina="${il.lamina}"` : ''}>${il.pie ? `<figcaption>${esc(il.pie)}</figcaption>` : ''}</figure>`;
+    if (il.modo === 'doble') return `<figure class="il il-doble izq" data-il="${il.id || ''}"><img src="${src}" alt=""></figure><figure class="il il-doble der" data-il="${il.id || ''}"><img src="${src}" alt=""></figure>`;
+    if (il.modo === 'blanca') return `<div class="il il-blanca" data-il="${il.id || ''}"></div>`;
+    return `<figure class="il il-${il.modo || 'media'}" data-il="${il.id || ''}"><img src="${src}" alt=""${il.lamina ? ` data-lamina="${il.lamina}"` : ''}>${il.pie ? `<figcaption>${esc(il.pie)}</figcaption>` : ''}</figure>`;
   }
 
+  function prepararIA(p) {
+    const ia = p.indiceAnalitico; if (!ia || ia.activo === false || !(ia.terminos || []).length) return null;
+    const ts = ia.terminos.map(x => x.t).filter(Boolean).sort((a, b) => b.length - a.length);
+    const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(?<![\\p{L}\\d])(' + ts.map(escRe).join('|') + ')(?![\\p{L}\\d])', 'giu');
+    const idx = new Map(ia.terminos.map((x, i) => [x.t.toLowerCase(), i]));
+    return { re, indice: m => idx.get(m.toLowerCase()) ?? 0 };
+  }
+  function indiceAnalitico(p) {
+    const ia = p.indiceAnalitico; if (!ia || ia.activo === false || !(ia.terminos || []).length) return '';
+    // los números se completan después de componer (Paginar.completarIA); se reserva el espacio con ceros
+    const cuenta = ia.terminos.map(() => 0);
+    if (CTX.ia) for (const b of p.bloques) { CTX.ia.re.lastIndex = 0; let m; while ((m = CTX.ia.re.exec(b.texto))) cuenta[CTX.ia.indice(m[0])]++; }
+    const orden = ia.terminos.map((x, i) => ({ ...x, i })).sort((a, b) => a.t.localeCompare(b.t, 'es'));
+    return `<section class="pre ia-indice"><h2 class="t-indice">Índice analítico</h2><ul>${orden.map(x => `<li data-ia-entrada="${x.i}"><span class="t">${esc(x.t)}</span>, <span class="pags">${Array(Math.min(12, Math.max(1, cuenta[x.i]))).fill('000').join(', ')}</span></li>`).join('')}</ul></section>`;
+  }
   function indice(p) {
     const caps = p.bloques.filter(b => b.tipo === 'h1');
     if (!p.indice || caps.length < 2) return '';
     return `<section class="pre indice"><h2 class="t-indice">Índice</h2><ol>${caps.map(b => `<li><a href="#b-${b.id}">${esc(b.texto)}</a></li>`).join('')}</ol></section>`;
   }
   function colofon(p, f) {
+    if (p.colofonActivo === false) return '';
     const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     const d = new Date();
     const txt = p.colofon.trim() || `Este libro se compuso en ${Folio.FUENTES[f.texto] || f.texto} con Folio${p.ciudad ? ', en ' + p.ciudad : ''}, en ${meses[d.getMonth()]} de ${d.getFullYear()}.`;
@@ -113,6 +176,7 @@
 
   const cssCadena = t => String(t).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
   function css(p, f, est) {
+    const saltoCap = p.ajustes.saltoCapitulo || (p.ajustes.capituloDerecha === false ? 'pagina' : 'derecha');
     const a = p.ajustes, [W, H] = Folio.FORMATOS[p.formato] || Folio.FORMATOS.A5;
     const tipo = Folio.TIPOS_LIBRO[p.tipo] || Folio.TIPOS_LIBRO.narrativa;
     const alin = p.tipo === 'poesia' ? 'left' : a.alineacion;
@@ -128,6 +192,7 @@
 @page capitulo:first{@top-center{content:none}}
 @page :blank{@bottom-center{content:none}@top-center{content:none}}
 @page lamina{@bottom-center{content:none}@top-center{content:none}}
+@page sangre{margin:0;@bottom-center{content:none}@top-center{content:none}}
 html{font-family:${f.texto},serif;font-size:${a.cuerpo}pt;line-height:${a.interlineado};color:#000;font-kerning:normal;font-variant-ligatures:common-ligatures}
 body{margin:0}
 .pre{page:pre;break-before:right;position:relative}
@@ -146,7 +211,15 @@ body{margin:0}
 .epigrafe{padding-top:30%}
 .epigrafe blockquote{margin:0 0 0 28%;font-style:italic;font-size:.95em}
 .epigrafe cite{display:block;font-style:normal;text-align:right;margin-top:.6em;font-size:.9em}
-.capitulo{page:capitulo;break-before:${a.capituloDerecha ? 'right' : 'page'}}
+.capitulo{page:capitulo;break-before:${saltoCap === 'continuo' ? 'auto' : saltoCap === 'pagina' ? 'page' : 'right'}}
+.capitulo.inicio{break-before:right}
+.salto{break-before:page}
+.pegado{break-after:avoid}
+.entero{break-inside:avoid}
+.nota-pie{float:footnote;font-size:.78em;line-height:1.3;text-indent:0;text-align:left;hyphens:manual;font-style:normal;font-weight:400}
+::footnote-call{content:counter(footnote);font-size:.65em;vertical-align:super;line-height:0;margin-left:.05em}
+::footnote-marker{content:counter(footnote) ". ";}
+@page{@footnote{float:bottom;border-top:.5pt solid #000;padding-top:1.5mm;margin-top:3mm}}
 .titulo-cap{font-family:${f.titulos};font-weight:400;font-size:${a.tituloCuerpo}pt;line-height:1.15;margin:${a.aireTitulo}mm 0 ${Math.max(6, a.tituloCuerpo * .9)}pt;text-align:${p.tipo === 'poesia' ? 'left' : 'center'};string-set:capitulo content(text);break-after:avoid;hyphens:none${est.filete ? `;padding-bottom:.4em;border-bottom:.5pt solid #000` : ''}}
 h2{font-family:${f.titulos};font-weight:400;font-size:${Math.max(a.cuerpo + 1, a.tituloCuerpo * .62)}pt;line-height:1.2;margin:1.6em 0 .7em;break-after:avoid;text-align:${p.tipo === 'poesia' ? 'left' : 'center'};hyphens:none}
 p{margin:0 0 ${a.entreParrafos}pt;text-align:${alin};text-indent:${a.sangria}em;widows:2;orphans:2;hyphens:manual;letter-spacing:${a.espaciado}em}
@@ -162,6 +235,15 @@ figure.il img{max-width:100%;display:inline-block}
 .il-vineta img{width:36%}
 .il-pagina{page:lamina;break-before:page;break-after:page;width:100%;height:calc(${H}mm - ${a.margenSuperior + a.margenInferior}mm - 2mm);display:flex;flex-direction:column;justify-content:center;align-items:center;margin:0;overflow:hidden}
 .il-pagina img{min-width:0;min-height:0;max-width:100%;max-height:calc(100% - 3em);width:auto;height:auto;object-fit:contain;flex:0 1 auto}
+figure.il-doble{page:sangre;break-after:page;width:${W}mm;height:${H}mm;margin:0;overflow:hidden;position:relative}
+figure.il-doble.izq{break-before:left}
+figure.il-doble img{position:absolute;top:0;height:100%;width:${2 * W}mm;object-fit:cover;max-width:none}
+figure.il-doble.izq img{left:0}
+figure.il-doble.der img{left:-${W}mm}
+.il-blanca{page:lamina;break-before:page;break-after:page;height:10mm}
+figure.il-sangre{page:sangre;break-before:page;break-after:page;width:${W}mm;height:${H}mm;margin:0;overflow:hidden}
+.il-sangre img{width:100%;height:100%;object-fit:cover;display:block}
+.il-sangre figcaption{display:none}
 figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
 .indice{break-before:right}
 .t-indice{font-family:${f.titulos};font-weight:400;text-align:center;margin:${a.aireTitulo}mm 0 1.5em}
@@ -171,29 +253,41 @@ figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
 .indice a{color:inherit;text-decoration:none;flex:1;display:flex;align-items:baseline}
 .indice a::before{content:'';order:2;flex:1;border-bottom:.6pt dotted #000;margin:0 .3em;transform:translateY(-.25em)}
 .indice a::after{content:target-counter(attr(href), page);order:3}
+.seccion-n{font-family:${f.titulos};font-weight:400;font-size:${Math.max(18, a.tituloCuerpo)}pt;text-align:center;margin:1.6em 0 .6em;break-after:avoid}
+.ref-sec{color:inherit;text-decoration:none;font-weight:700}
+.ref-falta{color:#a3321e}
+.ia-indice{break-before:right;font-size:.9em}
+.ia-indice ul{list-style:none;margin:0;padding:0;columns:2;column-gap:6mm}
+.ia-indice li{margin:0 0 .3em;padding-left:1em;text-indent:-1em;break-inside:avoid}
 .colofon{break-before:page;padding-top:55%;text-align:center;font-size:.82em;font-style:italic}
 `;
   }
 
   function componer(p, opt = {}) {
     const c = Folio.COLECCIONES.find(x => x.id === p.coleccion) || Folio.COLECCIONES[0];
-    const f = { texto: NOMBRE_FUENTE[p.ajustes.fuenteTexto || c.texto], titulos: NOMBRE_FUENTE[p.ajustes.fuenteTitulos || c.titulos] };
+    const kT = p.ajustes.fuenteTexto || c.texto, kTi = p.ajustes.fuenteTitulos || c.titulos;
+    const f = { texto: NOMBRE_FUENTE[kT] || kT, titulos: NOMBRE_FUENTE[kTi] || kTi };
+    const caras = (p.fuentesPropias || []).filter(x => (opt.recursos || {})[x.recurso]).map(x => `@font-face{font-family:${x.clave};src:url(${opt.recursos[x.recurso]});font-style:${x.estilo};font-weight:${x.peso}}`).join('\n');
     const estilo = INTERIOR[c.id] || INTERIOR.bestiario;
     const o = { estilo, recursos: opt.recursos || {} };
     const final = p.indicePos === 'inicio';
-    const html = preliminares(p) + (final ? indice(p) : '') + cuerpo(p, o) + (!final ? indice(p) : '') + colofon(p, f);
-    return { html, css: css(p, f, estilo), fuentes: f };
+    CTX = { lj: p.tipo === 'librojuego' || p.bloques.some(b => b.tipo === 'seccion') ? numerarLJ(p) : null, ia: prepararIA(p) };
+    const cuerpoHTML = cuerpo(p, o);
+    const html = preliminares(p) + (final ? indice(p) : '') + cuerpoHTML + (!final ? indice(p) : '') + indiceAnalitico(p) + colofon(p, f);
+    CTX = { lj: null, ia: null };
+    return { html, css: caras + '\n' + css(p, f, estilo) + (opt.imprenta ? '\n@page{bleed:3mm;marks:crop}' : ''), fuentes: f };
   }
 
   // Revisión de la paginación ya compuesta (lo que Paged.js entregó)
   function comprobar(doc, p) {
-    const avisos = [], secciones = {}, paginas = [...doc.querySelectorAll('.pagedjs_page')];
+    const avisos = [], secciones = {}, blancas = [], paginas = [...doc.querySelectorAll('.pagedjs_page')];
     const lh = p.ajustes.cuerpo * p.ajustes.interlineado * 96 / 72;
     paginas.forEach((pg, i) => {
       const n = i + 1, contenido = pg.querySelector('.pagedjs_page_content');
       const hijos = contenido ? [...contenido.querySelectorAll('section > *, .pagedjs_page_content > div > *')].filter(e => e.offsetHeight > 0 && !e.matches('section')) : [];
       for (const h of pg.querySelectorAll('h1.titulo-cap')) if (!h.dataset.splitFrom) secciones[h.id] = n;
-      if (pg.classList.contains('pagedjs_blank_page') || pg.classList.contains('pagedjs_pre_page')) return;
+      if (pg.classList.contains('pagedjs_blank_page')) { blancas.push(n); return; }
+      if (pg.classList.contains('pagedjs_pre_page')) return;
       if (!hijos.length) return;
       const ultimo = hijos[hijos.length - 1], prim = hijos[0];
       if (/^H[12]$/.test(ultimo.tagName) && hijos.length > 1) avisos.push({ tipo: 'titulo', pagina: n, msg: 'Título solo al pie de la página' });
@@ -208,8 +302,8 @@ figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
       for (const e of hijos) { const r = e.getBoundingClientRect(); if (r.width > area.width + 2) { avisos.push({ tipo: 'desborde', pagina: n, msg: 'Contenido que se sale de la caja' }); break; } }
     });
     // páginas casi vacías al final de un capítulo
-    return { paginas: paginas.length, avisos, secciones };
+    return { paginas: paginas.length, avisos, secciones, blancas };
   }
 
-  window.Libro = { componer, comprobar, procedencias, creditos, preliminares, INTERIOR, esc, guionar };
+  window.Libro = { numerarLJ, idSec, componer, comprobar, procedencias, creditos, preliminares, INTERIOR, esc, guionar };
 })();

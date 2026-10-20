@@ -39,6 +39,7 @@ function abrirFuera(url) {
 }
 
 app.whenReady().then(() => {
+  require('./modelo-local').registrar();
   protocol.handle('folio', req => {
     const u = new URL(req.url);
     const ruta = path.normalize(path.join(RAIZ, decodeURIComponent(u.pathname)));
@@ -56,7 +57,7 @@ app.whenReady().then(() => {
       { label: 'Abrir proyecto…', accelerator: 'CmdOrCtrl+O', click: () => ventana.webContents.send('menu', 'abrir') },
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => ventana.webContents.send('menu', 'guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ventana.webContents.send('menu', 'guardar-como') },
-      { type: 'separator' }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') },
+      { type: 'separator' }, { label: 'Modelo de texto local…', click: () => ventana.webContents.send('menu', 'modelo') }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') },
       { type: 'separator' }, { role: 'quit', label: 'Salir' }] },
     { label: 'Editar', submenu: [{ label: 'Deshacer', accelerator: 'CmdOrCtrl+Z', click: () => ventana.webContents.send('menu', 'deshacer') }, { label: 'Rehacer', accelerator: 'CmdOrCtrl+Y', click: () => ventana.webContents.send('menu', 'rehacer') }, { type: 'separator' }, { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' }, { role: 'selectAll', label: 'Seleccionar todo' }] },
     { label: 'Ver', submenu: [{ role: 'reload', label: 'Recargar' }, { role: 'toggleDevTools', label: 'Herramientas de desarrollo' }, { type: 'separator' }, { role: 'resetZoom', label: 'Tamaño real' }, { role: 'zoomIn', label: 'Acercar' }, { role: 'zoomOut', label: 'Alejar' }, { role: 'togglefullscreen', label: 'Pantalla completa' }] },
@@ -133,6 +134,16 @@ ipcMain.handle('archivo:guardar', async (_e, { nombre, b64, filtros }) => {
   await fsp.writeFile(r.filePath, Buffer.from(b64, 'base64'));
   return { ruta: r.filePath };
 });
+// perfil de la editorial: datos que valen para todos los libros (sello, logo, paletas propias, numeración, tipografías)
+const rutaPerfil = () => path.join(app.getPath('userData'), 'perfil.json');
+ipcMain.handle('perfil:leer', async () => { try { return JSON.parse(await fsp.readFile(rutaPerfil(), 'utf8')); } catch { return null; } });
+ipcMain.handle('perfil:guardar', async (_e, datos) => { await fsp.mkdir(path.dirname(rutaPerfil()), { recursive: true }); const tmp = rutaPerfil() + '.tmp'; await fsp.writeFile(tmp, JSON.stringify(datos, null, 1)); await fsp.rename(tmp, rutaPerfil()); return true; });
+// abrir archivos sueltos (tipografías, imágenes, Word de vuelta del corrector) sin pasar por un input
+ipcMain.handle('archivo:elegir', async (_e, { titulo, filtros, multiple }) => {
+  const r = await dialog.showOpenDialog(ventana, { title: titulo, filters: filtros || [], properties: multiple ? ['openFile', 'multiSelections'] : ['openFile'] });
+  if (r.canceled) return [];
+  return Promise.all(r.filePaths.map(async f => ({ nombre: path.basename(f), b64: (await fsp.readFile(f)).toString('base64') })));
+});
 ipcMain.handle('externo', (_e, url) => abrirFuera(url));
 ipcMain.handle('mostrar-en-carpeta', (_e, ruta) => shell.showItemInFolder(ruta));
 
@@ -157,43 +168,47 @@ async function componerPDF(trabajo) {
 const pendientes = {};
 ipcMain.on('imprimir:listo', (e, info) => { const f = pendientes[e.sender.id]; if (f) f(info); });
 
-// Imposición en cuadernillos plegados (cosido a caballete por cuadernillo).
-async function imponer(bytes, { pliego = 16, mmPagina }) {
-  const src = await PDFDocument.load(bytes);
-  const n = src.getPageCount();
-  const [pw, ph] = [mmPagina[0] * MM, mmPagina[1] * MM];
-  const out = await PDFDocument.create();
-  const paginas = await out.embedPdf(src, src.getPageIndices());
-  const tam = pliego === 0 ? Math.ceil(n / 4) * 4 : pliego;
-  const grupos = [];
-  for (let i = 0; i < n; i += tam) {
-    const resto = Math.min(tam, n - i), t = Math.ceil(resto / 4) * 4;
-    grupos.push({ inicio: i, t });
-  }
-  const mapa = [];
-  for (const [gi, g] of grupos.entries()) {
-    for (let k = 0; k < g.t / 4; k++) {
-      const caras = [[g.t - 2 * k, 1 + 2 * k], [2 + 2 * k, g.t - 1 - 2 * k]];
-      for (const [ci, [a, b]] of caras.entries()) {
-        const hoja = out.addPage([pw * 2, ph]);
-        for (const [lado, num] of [[0, a], [1, b]]) {
-          const idx = g.inicio + num - 1;
-          if (idx < n && num <= g.t && idx < g.inicio + tam) hoja.drawPage(paginas[idx], { x: lado * pw, y: 0, width: pw, height: ph });
-        }
-        mapa.push({ cuadernillo: gi + 1, hoja: k + 1, cara: ci ? 'dorso' : 'frente', izquierda: g.inicio + a <= n ? g.inicio + a : null, derecha: g.inicio + b <= n ? g.inicio + b : null });
-      }
-    }
-  }
-  return { bytes: await out.save(), mapa, blancas: grupos.reduce((s, g) => s + g.t, 0) - n };
+const Impresion = require('./impresion');
+// tapa como imagen PNG (para el libro digital): se compone en una ventana oculta y se fotografía
+async function tapaPNG(trabajo, k = 2) {
+  const mm = trabajo.mm; const ancho = Math.round(mm[0] * 96 / 25.4), alto = Math.round(mm[1] * 96 / 25.4);
+  const w = new BrowserWindow({ show: false, width: ancho, height: alto, useContentSize: true, webPreferences: { preload: path.join(__dirname, 'preload-imprimir.js'), contextIsolation: true, sandbox: true, zoomFactor: 1, offscreen: false } });
+  try {
+    const listo = new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('La tapa tardó demasiado.')), 60000); pendientes[w.webContents.id] = info => { clearTimeout(t); delete pendientes[w.webContents.id]; res(info); }; });
+    await w.loadURL('folio://app/imprimir.html');
+    w.webContents.send('imprimir:trabajo', { ...trabajo, tipo: 'cubierta' });
+    await listo;
+    await new Promise(r => setTimeout(r, 400)); // que termine de pintar
+    const img = await w.webContents.capturePage({ x: 0, y: 0, width: ancho, height: alto });
+    return img.resize({ width: Math.round(ancho * k), quality: 'best' }).toPNG();
+  } finally { w.destroy(); }
 }
-
-ipcMain.handle('pdf:generar', async (_e, { trabajo, nombre, guardar = true }) => {
+ipcMain.handle('cubierta:png', async (_e, trabajo) => (await tapaPNG(trabajo, trabajo.escala || 2)).toString('base64'));
+// componer + (numerar) + (imponer): devuelve los bytes finales y un resumen
+async function procesar(trabajo) {
+  if (trabajo.tipo === 'prueba') { const r = await Impresion.pruebaDuplex(trabajo.imposicion.mmPagina); return { bytes: Buffer.from(r.bytes), extra: {}, info: null }; }
   const { pdf, info } = await componerPDF(trabajo);
   let bytes = pdf, extra = {};
-  if (trabajo.tipo === 'pliegos') { const r = await imponer(pdf, trabajo.imposicion); bytes = Buffer.from(r.bytes); extra = { mapa: r.mapa, blancas: r.blancas }; }
-  const doc = await PDFDocument.load(bytes);
-  const p0 = doc.getPage(0).getSize();
-  const resultado = { paginas: doc.getPageCount(), mm: [Math.round(p0.width / MM * 10) / 10, Math.round(p0.height / MM * 10) / 10], info, ...extra };
+  const num = trabajo.numeracion;
+  if (num && num.hasta >= num.desde && trabajo.tipo !== 'cubierta') {
+    // cada ejemplar se impone por separado para que los pliegos de uno no se mezclen con los del siguiente
+    if (trabajo.tipo === 'pliegos') {
+      const final = await PDFDocument.create(); let mapa = null, blancas = 0, instrucciones = '';
+      for (let e = num.desde; e <= num.hasta; e++) {
+        const una = await Impresion.numerar(pdf, { desde: e, hasta: e, total: num.total, texto: num.texto });
+        const imp = await Impresion.imponer(una.bytes, trabajo.imposicion); mapa = mapa || imp.mapa; blancas = imp.blancas; instrucciones = imp.instrucciones;
+        const d = await PDFDocument.load(imp.bytes); (await final.copyPages(d, d.getPageIndices())).forEach(p => final.addPage(p));
+      }
+      bytes = Buffer.from(await final.save()); extra = { mapa, blancas, instrucciones, ejemplares: num.hasta - num.desde + 1 };
+    } else { const r = await Impresion.numerar(pdf, { ...num }); bytes = Buffer.from(r.bytes); extra = { ejemplares: r.ejemplares }; }
+  } else if (trabajo.tipo === 'pliegos') { const r = await Impresion.imponer(pdf, trabajo.imposicion); bytes = Buffer.from(r.bytes); extra = { mapa: r.mapa, blancas: r.blancas, instrucciones: r.instrucciones }; }
+  return { bytes, extra, info };
+}
+async function resumen(bytes) { const doc = await PDFDocument.load(bytes); const p0 = doc.getPage(0).getSize(); return { paginas: doc.getPageCount(), mm: [Math.round(p0.width / MM * 10) / 10, Math.round(p0.height / MM * 10) / 10] }; }
+
+ipcMain.handle('pdf:generar', async (_e, { trabajo, nombre, guardar = true }) => {
+  const { bytes, extra, info } = await procesar(trabajo);
+  const resultado = { ...(await resumen(bytes)), info, ...extra };
   if (!guardar) return { ...resultado, b64: Buffer.from(bytes).toString('base64') };
   const r = await dialog.showSaveDialog(ventana, { title: 'Guardar PDF', defaultPath: nombre, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
   if (r.canceled) return { cancelado: true };
@@ -203,11 +218,8 @@ ipcMain.handle('pdf:generar', async (_e, { trabajo, nombre, guardar = true }) =>
 
 // Para pruebas automáticas: generar sin diálogo a una ruta dada.
 ipcMain.handle('pdf:generar-a', async (_e, { trabajo, ruta }) => {
-  const { pdf, info } = await componerPDF(trabajo);
-  let bytes = pdf, extra = {};
-  if (trabajo.tipo === 'pliegos') { const r = await imponer(pdf, trabajo.imposicion); bytes = Buffer.from(r.bytes); extra = { mapa: r.mapa, blancas: r.blancas }; }
+  const { bytes, extra, info } = await procesar(trabajo);
   await fsp.writeFile(ruta, bytes);
-  const doc = await PDFDocument.load(bytes); const p0 = doc.getPage(0).getSize();
-  return { ruta, paginas: doc.getPageCount(), mm: [p0.width / MM, p0.height / MM], info, ...extra };
+  return { ruta, ...(await resumen(bytes)), info, ...extra };
 });
-module.exports = { imponer };
+module.exports = { procesar };

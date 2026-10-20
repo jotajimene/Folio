@@ -28,30 +28,62 @@
   function rgb(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(x => x + x).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
   function contener(cw, ch, bw, bh) { const k = Math.min(bw / cw, bh / ch); return [cw * k, ch * k]; }
 
-  // lámina elegida (o sorteada con la semilla, según lo que pide el sistema)
+
+  function mezclar(a, b, t) { const A = rgb(a), B = rgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+
+  // versión suave para ampliar: interpola y vuelve a entintar con borde antialias (no se ven los píxeles)
+  function tintarSuave(img, color, recorte, ow, oh) {
+    const [sx, sy, sw, sh] = recorte;
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(ow)); c.height = Math.max(1, Math.round(oh));
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    // dos pasos de ampliación con desenfoque leve: los escalones del 1 bit se vuelven curvas
+    const m = document.createElement('canvas'); const k1 = Math.min(4, ow / sw); m.width = Math.max(1, Math.round(sw * k1)); m.height = Math.max(1, Math.round(sh * k1));
+    const mg = m.getContext('2d'); mg.imageSmoothingEnabled = true; mg.imageSmoothingQuality = 'high'; mg.filter = `blur(${Math.max(.5, k1 * .35)}px)`; mg.drawImage(img, sx, sy, sw, sh, 0, 0, m.width, m.height);
+    g.filter = 'blur(.6px)'; g.drawImage(m, 0, 0, c.width, c.height); g.filter = 'none';
+    const d = g.getImageData(0, 0, c.width, c.height), a = d.data, [r, gg, b] = rgb(color);
+    for (let i = 0; i < a.length; i += 4) { const l = a[i] * .3 + a[i + 1] * .59 + a[i + 2] * .11; a[i] = r; a[i + 1] = gg; a[i + 2] = b; a[i + 3] = Math.max(0, Math.min(255, (150 - l) * 6 + 128)); }
+    g.putImageData(d, 0, 0); return c;
+  }
+
+  // lámina elegida (o sorteada con la semilla). Para tapas solo se usan láminas limpias (sin cortes ni bordes de papel).
+  let recActual = {};
+  const srcDe = l => l.src || ARCHIVO.src(l.id);
   function laminaPara(p, gen, sem, n = 1) {
     if (!window.ARCHIVO || !ARCHIVO.listo) return [];
-    if (p.cubierta.imagen && n === 1 && ARCHIVO.porId[p.cubierta.imagen]) return [ARCHIVO.porId[p.cubierta.imagen]];
-    const tipos = { cenefas: ['orla'], detalle: ['figura', 'escena'], reticula: ['figura'] }[gen] || ['figura'];
-    const grande = l => l.w > 220 && l.h > 220;
-    let filtro = l => tipos.includes(l.tipo) && (gen === 'cenefas' || grande(l));
-    if (gen === 'reticula' && p.cubierta.imagen && ARCHIVO.porId[p.cubierta.imagen]) {
-      const base = ARCHIVO.porId[p.cubierta.imagen], fuente = (ARCHIVO.paginas[base.p] || {}).f;
-      const mismos = ARCHIVO.elegir(l => l.id !== base.id && l.tipo === 'figura' && (ARCHIVO.paginas[l.p] || {}).f === fuente && l.w > 120, sem, n - 1);
-      return [base, ...mismos];
-    }
+    // imagen propia (agregada al proyecto)
+    if (p.cubierta.imagen && String(p.cubierta.imagen).startsWith('recurso:')) { const nombre = p.cubierta.imagen.slice(8), d = p.cubierta.imagenDims || [1000, 1000]; if (recActual[nombre]) { const l = { id: p.cubierta.imagen, src: recActual[nombre], w: d[0], h: d[1], q: 1, tipo: 'figura', propia: true }; if (gen !== 'reticula') return [l]; } }
+    const elegida = p.cubierta.imagen && ARCHIVO.porId[p.cubierta.imagen];
     if (gen === 'reticula') {
-      const una = ARCHIVO.elegir(filtro, sem, 1)[0]; const fuente = (ARCHIVO.paginas[una.p] || {}).f;
-      return [una, ...ARCHIVO.elegir(l => l.id !== una.id && l.tipo === 'figura' && (ARCHIVO.paginas[l.p] || {}).f === fuente && l.w > 120, sem + 7, n - 1)];
+      const hierba = l => l.hb && l.q !== undefined ? true : !!l.hb;
+      const base = elegida && elegida.hb ? elegida : ARCHIVO.elegir(hierba, sem, 1)[0];
+      if (!base) return [];
+      return [base, ...ARCHIVO.elegir(l => l.id !== base.id && l.hb, sem + 7, n - 1)];
     }
+    if (elegida && n === 1) return [elegida];
+    const filtro = {
+      detalle: l => l.q && l.w >= 500 && l.h >= 400,
+      teselacion: l => l.q && l.tipo === 'figura' && Math.min(l.w, l.h) >= 300,
+      cenefas: l => l.q && l.tipo === 'figura' && l.w >= 200,
+      umbral: l => l.q && l.tipo === 'figura' && !l.hb,
+    }[gen] || (l => l.q && l.tipo === 'figura' && l.w > 260 && l.h > 260);
     return ARCHIVO.elegir(filtro, sem, n);
   }
+  // recorte del fragmento: centro (x,y) en 0..1 y acercamiento z (1 = ancho completo)
+  function recorteFragmento(l, p, r, aspecto) {
+    const rc = p.cubierta.recorte || { x: .3 + r() * .4, y: .3 + r() * .4, z: 2.4 + r() * 1.4 };
+    const z = Math.max(1, Math.min(Fragmento.zMax(l), rc.z));
+    let sw = l.w / z, sh = sw / aspecto; if (sh > l.h) { sh = l.h; sw = sh * aspecto; }
+    const sx = Math.max(0, Math.min(l.w - sw, rc.x * l.w - sw / 2)), sy = Math.max(0, Math.min(l.h - sh, rc.y * l.h - sh / 2));
+    return { caja: [sx, sy, sw, sh], rc: { x: rc.x, y: rc.y, z } };
+  }
+  // el máximo acercamiento: que el recorte tenga al menos ~260 px de ancho (más se vería blando)
+  const Fragmento = { zMax: l => Math.max(1, Math.min(6, l.w / 260)) };
 
   // ---------------- generadores ----------------
   // g: contexto; D: {W,H,fx,fy,fw,fh (frente), k: px por mm}; pal: [fondo,tinta,acento]; r(): azar con semilla
   const GEN = {
     async grabado(g, D, pal, r, p) {
-      const [l] = laminaPara(p, 'grabado', p.cubierta.semilla); const img = l && await cargarImg(ARCHIVO.src(l.id));
+      const [l] = laminaPara(p, 'grabado', p.cubierta.semilla); const img = l && await cargarImg(srcDe(l));
       const k = D.k;
       g.strokeStyle = pal[1]; g.lineWidth = .5 * k; g.strokeRect(D.fx + 6 * k, D.fy + 6 * k, D.fw - 12 * k, D.fh - 12 * k);
       g.lineWidth = 1.4 * k; g.strokeRect(D.fx + 7.6 * k, D.fy + 7.6 * k, D.fw - 15.2 * k, D.fh - 15.2 * k);
@@ -59,65 +91,91 @@
       return { laminas: l ? [l.id] : [] };
     },
     async teselacion(g, D, pal, r, p) {
-      const [l] = laminaPara(p, 'teselacion', p.cubierta.semilla); const img = l && await cargarImg(ARCHIVO.src(l.id));
+      // caleidoscopio de ocho espejos (simetría p4m): una cuña triangular del grabado se refleja hasta formar la pieza
+      const [l] = laminaPara(p, 'teselacion', p.cubierta.semilla); const img = l && await cargarImg(srcDe(l));
       if (!img) return { laminas: [] };
-      const lado = Math.min(img.naturalWidth, img.naturalHeight) * (0.45 + r() * 0.35);
-      const sx = r() * (img.naturalWidth - lado), sy = r() * (img.naturalHeight - lado);
-      const t = tintar(img, pal[1], [sx, sy, lado, lado]);
-      const celda = D.fw / (2 + Math.floor(r() * 3));
-      const m = document.createElement('canvas'); m.width = m.height = Math.round(celda * 2); const mg = m.getContext('2d');
-      const espejos = [[1, 1, 0, 0], [-1, 1, 2, 0], [1, -1, 0, 2], [-1, -1, 2, 2]];
-      for (const [ax, ay, ox, oy] of espejos) { mg.save(); mg.translate(ox * celda, oy * celda); mg.scale(ax, ay); mg.drawImage(t, 0, 0, celda, celda); mg.restore(); }
-      const pat = g.createPattern(m, 'repeat'); g.save(); g.translate(D.fx % m.width, D.fy); g.fillStyle = pat; g.fillRect(-D.fx % m.width - m.width, 0, D.W + 2 * m.width, D.H); g.restore();
+      const lado = Math.min(img.naturalWidth, img.naturalHeight) * (0.32 + r() * 0.3);
+      const sx = img.naturalWidth * .1 + r() * Math.max(0, img.naturalWidth * .8 - lado), sy = img.naturalHeight * .1 + r() * Math.max(0, img.naturalHeight * .8 - lado);
+      const piezas = 4 + Math.floor(r() * 4);               // piezas a lo ancho del frente
+      const S = Math.round(D.fw / piezas), h = Math.round(S / 2);
+      const t = tintarSuave(img, pal[1], [sx, sy, lado, lado], h, h);
+      const q = document.createElement('canvas'); q.width = q.height = h; const qg = q.getContext('2d');
+      const tri = () => { qg.beginPath(); qg.moveTo(0, 0); qg.lineTo(h, 0); qg.lineTo(h, h); qg.closePath(); };
+      qg.save(); tri(); qg.clip(); qg.drawImage(t, 0, 0); qg.restore();
+      qg.save(); qg.setTransform(0, 1, 1, 0, 0, 0); tri(); qg.clip(); qg.drawImage(t, 0, 0); qg.restore();
+      const m = document.createElement('canvas'); m.width = m.height = S; const mg = m.getContext('2d');
+      for (const [ax, ay] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { mg.save(); mg.translate(ax < 0 ? S : 0, ay < 0 ? S : 0); mg.scale(ax, ay); mg.drawImage(q, 0, 0); mg.restore(); }
+      // trama de rombos opcional: piezas alternadas giradas 45°
+      const pat = g.createPattern(m, 'repeat'); g.save(); g.translate(D.fx + D.fw / 2 - S / 2, 0); g.fillStyle = pat; g.fillRect(-D.fx - D.fw, -S, D.W * 2 + S * 2, D.H + 2 * S); g.restore();
       return { laminas: [l.id] };
     },
     async foto(g, D, pal, r, p, opt) {
       const src = p.cubierta.foto && opt.recursos && opt.recursos[p.cubierta.foto];
       let img = src ? await cargarImg(src) : null, ids = [];
-      if (!img) { const [l] = laminaPara(p, 'foto', p.cubierta.semilla); img = l && await cargarImg(ARCHIVO.src(l.id)); if (l) ids = [l.id]; }
+      if (!img) { const [l] = laminaPara(p, 'foto', p.cubierta.semilla); img = l && await cargarImg(srcDe(l)); if (l) ids = [l.id]; }
       if (!img) return { laminas: [] };
-      // trama de semitono a 45° sobre la parte alta del frente, a sangre
-      const ax = D.fx, ay = D.fy - (D.sangrado || 0), aw = D.fw + (D.sangrado || 0), ah = D.fh * .66 + (D.sangrado || 0);
-      const src2 = document.createElement('canvas'); src2.width = 240; src2.height = Math.round(240 * ah / aw);
+      // en la tapa extendida la trama corre por contra, lomo y frente
+      const s = D.sangrado || 0, ext = D.W > D.fw + 2 * s + 2;
+      const ax = ext ? 0 : D.fx, ay = 0, aw = ext ? D.W : D.fw + s, ah = D.fh * .66 + s;
+      const src2 = document.createElement('canvas'); src2.width = 320; src2.height = Math.round(320 * ah / aw);
       const sg = src2.getContext('2d'); const ar = img.naturalWidth / img.naturalHeight, br = aw / ah;
       let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0; if (ar > br) { sw = sh * br; sx = (img.naturalWidth - sw) / 2; } else { sh = sw / br; sy = (img.naturalHeight - sh) / 2; }
       sg.fillStyle = '#fff'; sg.fillRect(0, 0, src2.width, src2.height); sg.drawImage(img, sx, sy, sw, sh, 0, 0, src2.width, src2.height);
       const px = sg.getImageData(0, 0, src2.width, src2.height).data;
-      const paso = aw / (55 + r() * 25), ang = Math.PI / 4;
+      const paso = D.fw / (55 + r() * 25), ang = Math.PI / 4;
       g.save(); g.beginPath(); g.rect(ax, ay, aw, ah); g.clip(); g.fillStyle = pal[2]; g.fillRect(ax, ay, aw, ah); g.fillStyle = pal[1];
       const cx = ax + aw / 2, cy = ay + ah / 2, R = Math.hypot(aw, ah) / 2 + paso;
       for (let u = -R; u < R; u += paso) for (let v = -R; v < R; v += paso) {
         const x = cx + u * Math.cos(ang) - v * Math.sin(ang), y = cy + u * Math.sin(ang) + v * Math.cos(ang);
         if (x < ax - paso || y < ay - paso || x > ax + aw + paso || y > ay + ah + paso) continue;
         const ix = Math.min(src2.width - 1, Math.max(0, ((x - ax) / aw * src2.width) | 0)), iy = Math.min(src2.height - 1, Math.max(0, ((y - ay) / ah * src2.height) | 0));
-        const o = (iy * src2.width + ix) * 4, l = (px[o] * .3 + px[o + 1] * .59 + px[o + 2] * .11) / 255;
-        const rad = paso * .62 * Math.sqrt(1 - l); if (rad > .3) { g.beginPath(); g.arc(x, y, rad, 0, 6.2832); g.fill(); }
+        const o = (iy * src2.width + ix) * 4, lu = (px[o] * .3 + px[o + 1] * .59 + px[o + 2] * .11) / 255;
+        const rad = paso * .62 * Math.sqrt(1 - lu); if (rad > .3) { g.beginPath(); g.arc(x, y, rad, 0, 6.2832); g.fill(); }
+      }
+      g.restore();
+      // filete bajo la trama
+      g.fillStyle = pal[1]; g.fillRect(ax, ay + ah, aw, Math.max(1, .8 * D.k));
+      return { laminas: ids };
+    },
+    async umbral(g, D, pal, r, p) {
+      // composición de formas planas con el área de texto arriba (estilo editorial contemporáneo)
+      const k = D.k, s = D.sangrado || 0, x0 = D.fx, x1 = D.fx + D.fw + s, y1 = D.fy + D.fh + s, top = D.fy + D.fh * .40, w = x1 - x0, h = y1 - top;
+      const c1 = pal[1], c2 = pal[2], c3 = mezclar(pal[0], '#ffffff', .55);
+      const plantilla = Math.floor(r() * 4);
+      let forma = null; // ruta donde puede ir el grabado
+      g.save(); g.beginPath(); g.rect(x0, D.fy - s, w, D.fh + 2 * s); g.clip();
+      if (plantilla === 0) { // arco: una puerta
+        const aw = w * (.46 + r() * .18), ax = x0 + (w - aw) * (.15 + r() * .7), ay = top + h * .08;
+        g.fillStyle = c1; g.fillRect(x0, y1 - h * .22, w, h * .22 + s);
+        forma = new Path2D(); forma.moveTo(ax, y1 + s); forma.lineTo(ax, ay + aw / 2); forma.arc(ax + aw / 2, ay + aw / 2, aw / 2, Math.PI, 0); forma.lineTo(ax + aw, y1 + s); forma.closePath();
+        g.fillStyle = c2; g.fill(forma);
+      } else if (plantilla === 1) { // sol y horizonte
+        const R = w * (.28 + r() * .14), cx = x0 + w * (.25 + r() * .5), cy = top + h * .42;
+        g.fillStyle = c1; g.fillRect(x0, top + h * .5, w, h * .5 + s);
+        forma = new Path2D(); forma.arc(cx, cy, R, 0, Math.PI * 2); g.fillStyle = c2; g.fill(forma);
+        g.fillStyle = c3; g.fillRect(x0, top + h * .5 + R * .25, w, Math.max(2, 2.2 * k));
+      } else if (plantilla === 2) { // escalones
+        const n = 3 + Math.floor(r() * 3), paso = w / n, alto = h / (n + 1);
+        for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? c2 : c1; g.fillRect(x0 + i * paso, y1 - alto * (i + 1), paso + 1, alto * (i + 1) + s); }
+        forma = new Path2D(); const R = paso * .8; forma.arc(x0 + paso * (n - .5), y1 - alto * (n + .2) - R * .2, R * .5, 0, Math.PI * 2); g.fillStyle = c3; g.fill(forma);
+      } else { // cuartos de círculo
+        const R = Math.min(w, h) / 2;
+        const cuartos = [[x0, top, 0], [x0 + w, top, Math.PI / 2], [x0 + w, y1, Math.PI], [x0, y1, Math.PI * 1.5]];
+        cuartos.forEach(([cx, cy, a0], i) => { const pth = new Path2D(); pth.moveTo(cx, cy); pth.arc(cx, cy, R * (i % 2 ? .9 : 1.05), a0, a0 + Math.PI / 2); pth.closePath(); g.fillStyle = [c1, c2, c3, c1][i]; g.fill(pth); if (i === 0) forma = pth; });
+      }
+      // grabado recortado dentro de la forma (la mitad de las veces)
+      let ids = [];
+      if (forma && r() < .6) {
+        const [l] = laminaPara(p, 'umbral', p.cubierta.semilla); const img = l && await cargarImg(srcDe(l));
+        if (img) { ids = [l.id]; g.save(); g.clip(forma); const t = tintar(img, pal[0]); const [iw, ih] = contener(t.width, t.height, w * .55, h * .62); g.drawImage(t, x0 + (w - iw) / 2 + (r() - .5) * w * .2, top + h - ih - h * .06, iw, ih); g.restore(); }
       }
       g.restore();
       return { laminas: ids };
     },
-    async campos(g, D, pal, r, p) {
-      const k = D.k, x0 = D.fx, y0 = D.fy - (D.sangrado || 0), w = D.fw + (D.sangrado || 0), h = D.fh * .68 + (D.sangrado || 0);
-      const cols = [pal[1], pal[2]];
-      const n = 2 + Math.floor(r() * 3);
-      const cortes = Array.from({ length: n - 1 }, () => .2 + r() * .6).sort();
-      const vertical = r() < .5; let prev = 0;
-      [...cortes, 1].forEach((c, i) => {
-        g.fillStyle = cols[i % 2];
-        if (vertical) g.fillRect(x0 + prev * w, y0, (c - prev) * w + 1, h); else g.fillRect(x0, y0 + prev * h, w, (c - prev) * h + 1);
-        prev = c;
-      });
-      // un arco o un círculo que cruza los campos
-      g.fillStyle = cols[n % 2];
-      const R = w * (.18 + r() * .2); g.beginPath(); g.arc(x0 + w * (.2 + r() * .6), y0 + h * (.25 + r() * .5), R, 0, Math.PI * (r() < .5 ? 1 : 2)); g.fill();
-      const [l] = laminaPara(p, 'campos', p.cubierta.semilla); const img = l && await cargarImg(ARCHIVO.src(l.id));
-      if (img) { const t = tintar(img, pal[0]); const [iw, ih] = contener(t.width, t.height, w * .44, h * .44); g.drawImage(t, x0 + w * (.08 + r() * .45), y0 + h * (.1 + r() * .42), iw, ih); }
-      return { laminas: l ? [l.id] : [] };
-    },
     async cenefas(g, D, pal, r, p) {
       // friso: una figura del archivo repetida en banda, alternando su sentido, arriba y abajo
-      const [l] = laminaPara({ cubierta: { ...p.cubierta, imagen: p.cubierta.imagen } }, 'campos', p.cubierta.semilla);
-      const img = l && await cargarImg(ARCHIVO.src(l.id)); if (!img) return { laminas: [] };
+      const [l] = laminaPara(p, 'cenefas', p.cubierta.semilla);
+      const img = l && await cargarImg(srcDe(l)); if (!img) return { laminas: [] };
       const k = D.k, t = tintar(img, pal[1]);
       for (const y of [D.fy + 11 * k, D.fy + D.fh - 11 * k - D.fh * .14]) {
         const bh = D.fh * .14, bw = t.width * bh / t.height, x0 = D.fx + 11 * k, x1 = D.fx + D.fw - 11 * k;
@@ -130,26 +188,14 @@
       }
       return { laminas: [l.id] };
     },
-    async tipografica(g, D, pal, r, p) {
-      const letra = ((p.titulo || 'F').trim()[0] || 'F').toUpperCase();
-      await document.fonts.load('400 200px Fraktur').catch(() => {});
-      const tam = D.fh * (1.0 + r() * .25);
-      g.save(); g.beginPath(); g.rect(D.fx, D.fy - (D.sangrado || 0), D.fw + (D.sangrado || 0), D.fh + 2 * (D.sangrado || 0)); g.clip();
-      g.fillStyle = pal[1]; g.font = `${tam}px Fraktur`; g.textBaseline = 'alphabetic';
-      const m = g.measureText(letra);
-      g.fillText(letra, D.fx + D.fw * (.55 - r() * .2) - m.width / 2, D.fy + D.fh * .82);
-      g.restore();
-      return { laminas: [] };
-    },
     async detalle(g, D, pal, r, p) {
-      const [l] = laminaPara(p, 'detalle', p.cubierta.semilla); const img = l && await cargarImg(ARCHIVO.src(l.id));
+      const [l] = laminaPara(p, 'detalle', p.cubierta.semilla); const img = l && await cargarImg(srcDe(l));
       if (!img) return { laminas: [] };
-      const s = D.sangrado || 0, aw = D.fw + s, ah = D.fh + 2 * s, br = aw / ah;
-      const f = .28 + r() * .22; let sw = img.naturalWidth * f, sh = sw / br; if (sh > img.naturalHeight * .9) { sh = img.naturalHeight * .6; sw = sh * br; }
-      const sx = img.naturalWidth * .1 + r() * Math.max(0, img.naturalWidth * .8 - sw), sy = img.naturalHeight * .1 + r() * Math.max(0, img.naturalHeight * .8 - sh);
-      const t = tintar(img, pal[1], [sx, sy, sw, sh]);
-      g.imageSmoothingEnabled = false; g.drawImage(t, D.fx, D.fy - s, aw, ah); g.imageSmoothingEnabled = true;
-      return { laminas: [l.id] };
+      const s = D.sangrado || 0, aw = D.fw + s, ah = D.fh + 2 * s;
+      const { caja, rc } = recorteFragmento(l, p, r, aw / ah);
+      const t = tintarSuave(img, pal[1], caja, aw, ah);
+      g.drawImage(t, D.fx, D.fy - s, aw, ah);
+      return { laminas: [l.id], recorte: rc };
     },
     async reticula(g, D, pal, r, p) {
       const ls = laminaPara(p, 'reticula', p.cubierta.semilla, 9); const k = D.k, ids = [];
@@ -157,7 +203,7 @@
       g.strokeStyle = pal[1]; g.lineWidth = .5 * k;
       for (let i = 0; i < 9; i++) {
         const x = D.fx + m + (i % 3) * cw, y = top + Math.floor(i / 3) * ch; g.strokeRect(x, y, cw, ch);
-        const l = ls[i]; if (!l) continue; const img = await cargarImg(ARCHIVO.src(l.id)); if (!img) continue; ids.push(l.id);
+        const l = ls[i]; if (!l) continue; const img = await cargarImg(srcDe(l)); if (!img) continue; ids.push(l.id);
         const t = tintar(img, i === 4 ? pal[2] : pal[1]); const [w, h] = contener(t.width, t.height, cw * .82, ch * .82); g.drawImage(t, x + (cw - w) / 2, y + (ch - h) / 2, w, h);
       }
       return { laminas: ids };
@@ -191,9 +237,8 @@
       case 'grabado': return `<div class="col">${col}</div><div class="t">${t}</div>${sub}<div class="a">${a}</div>`;
       case 'teselacion': return `<div class="banda"><div class="col">${col}</div><div class="t">${t}</div><div class="a">${a}</div></div>`;
       case 'foto': return `<div class="ficha"><div>N.º ${esc(p.numero || '')} — ${esc(c.nombre)}</div><div class="t">${t}</div>${sub}<div class="a">${a}</div><div class="s">${esc(p.sello || '')}</div></div>`;
-      case 'campos': return `<div class="pie"><div class="t">${t}</div><div class="a">${a}</div><div class="col">${col}</div></div>`;
+      case 'umbral': return `<div class="cabeza"><div class="a">${a}</div><div class="t">${t}</div>${sub}</div><div class="col">${col}</div>`;
       case 'cenefas': return `<div class="centro"><div class="a">${a}</div><div class="t">${t}</div>${sub}<div class="col">${col}</div></div>`;
-      case 'tipografica': return `<div class="col">${col}</div><div class="bloque"><div class="t">${t}</div><div class="a">${a}</div></div>`;
       case 'detalle': return `<div class="caja"><div class="t">${t}</div><div class="a">${a}</div></div><div class="col">${col}</div>`;
       case 'reticula': return `<div class="cab"><div class="t">${t}</div><div class="a">${a}</div><div class="col">${col}</div></div>`;
       case 'texto': return `<div class="caja"><div class="t">${t}</div><div class="a">${a}</div><div class="col">${col}</div></div>`;
@@ -203,16 +248,15 @@
   }
   function cssSistema(gen, f, k) {
     const T = `font-family:${f};font-weight:400;`;
-    const comun = `.cub{position:relative;overflow:hidden;background:var(--fondo);color:var(--tinta)}.cub>img.arte{position:absolute;left:0;top:0;width:100%;height:100%}
+    const comun = `.cub,.cub *{box-sizing:border-box}.cub{position:relative;overflow:hidden;background:var(--fondo);color:var(--tinta)}.cub>img.arte{position:absolute;left:0;top:0;width:100%;height:100%}
 .frente{position:absolute;display:flex;flex-direction:column}.frente>*{position:relative}
 .frente .t{${T}line-height:1.05;hyphens:none;overflow-wrap:break-word}`;
     const s = {
       grabado: `.frente{padding:13mm 13mm 12mm;text-align:center}.frente .col{font-family:FellSC,Fell;letter-spacing:.14em;font-size:8pt;border-bottom:.5pt solid var(--tinta);padding-bottom:2mm}.frente .t{font-family:Fell;font-size:calc(25pt * var(--esc));margin-top:5mm}.frente .sub{font-family:Fell;font-style:italic;font-size:10pt;margin-top:2mm}.frente .a{margin-top:auto;font-family:Fell;font-style:italic;font-size:11pt;border-top:.5pt solid var(--tinta);padding-top:2mm}`,
       teselacion: `.frente{justify-content:flex-end;padding:0 0 22mm}.banda{background:var(--acento);color:var(--tinta);padding:6mm 9mm 7mm;margin:0 -1px}.banda .col{font-family:FGothic;font-size:7pt;letter-spacing:.2em}.banda .t{${T}text-transform:uppercase;font-size:calc(22pt * var(--esc));letter-spacing:.02em;margin:2mm 0}.banda .a{font-family:FPalatino;font-style:italic;font-size:10pt}`,
       foto: `.frente{justify-content:flex-end;padding:0 10mm 10mm}.ficha{font-family:FMono;font-size:8pt;line-height:1.35;border-top:1.2pt solid var(--tinta);padding-top:3mm}.ficha .t{font-family:FMono;font-size:calc(17pt * var(--esc));text-transform:uppercase;margin:2mm 0;line-height:1.1}.ficha .a{font-size:10pt}.ficha .s{margin-top:3mm;opacity:.7}`,
-      campos: `.frente{justify-content:flex-end;padding:0 9mm 10mm}.pie .t{${T}font-weight:700;font-size:calc(26pt * var(--esc));letter-spacing:-.01em;line-height:1}.pie .a{font-family:FSans;font-size:10pt;margin-top:2.5mm}.pie .col{font-family:FSans;font-size:6.5pt;letter-spacing:.18em;margin-top:5mm}`,
+      umbral: `.frente{padding:11mm 10mm 9mm}.cabeza .a{font-family:FSans;font-size:10.5pt;margin-bottom:2.5mm;color:var(--tinta)}.cabeza .t{font-family:FSans;font-weight:700;font-size:calc(30pt * var(--esc));letter-spacing:-.02em;line-height:.98;color:var(--tinta)}.cabeza .sub{font-family:FSans;font-size:10pt;margin-top:2mm}.frente>.col{position:absolute;right:9mm;bottom:8mm;font-family:FSans;font-weight:700;font-size:7pt;letter-spacing:.2em;background:var(--fondo);padding:1mm 2mm}`,
       cenefas: `.frente{justify-content:center;padding:0 16mm;text-align:center}.centro .a{font-family:FBookman;font-size:9pt;letter-spacing:.16em;text-transform:uppercase}.centro .t{font-family:FBookman;font-size:calc(22pt * var(--esc));margin:5mm 0 3mm}.centro .sub{font-family:FBookman;font-style:italic;font-size:9.5pt}.centro .col{font-family:FBookman;font-size:7pt;letter-spacing:.2em;margin-top:6mm;color:var(--acento)}`,
-      tipografica: `.frente{padding:11mm 10mm}.frente .col{font-family:FSchool;font-size:7.5pt;letter-spacing:.2em}.bloque{margin-top:auto;align-self:flex-end;text-align:right;max-width:70%}.bloque .t{font-family:FSchool;font-style:italic;font-size:calc(19pt * var(--esc));color:var(--acento)}.bloque .a{font-family:FSchool;font-size:10pt;margin-top:2mm}`,
       detalle: `.frente{padding:0 0 12mm;justify-content:flex-end}.caja{background:var(--fondo);margin-right:22%;padding:5mm 7mm 6mm 9mm;border-top:1.4pt solid var(--tinta)}.caja .t{${T}font-size:calc(20pt * var(--esc));text-transform:uppercase;letter-spacing:.01em}.caja .a{font-family:FNarrow;font-size:10pt;margin-top:2mm}.frente>.col{position:absolute;top:8mm;right:8mm;background:var(--fondo);font-family:FNarrow;font-size:7pt;letter-spacing:.18em;padding:1.2mm 2mm}`,
       reticula: `.frente{padding:10mm 10mm 0}.cab .t{font-family:FPalatino;font-size:calc(19pt * var(--esc));color:var(--acento)}.cab .a{font-family:FPalatino;font-style:italic;font-size:10pt;margin-top:1.5mm}.cab .col{font-family:FSchool;font-size:6.5pt;letter-spacing:.2em;margin-top:2mm}`,
       texto: `.frente{justify-content:center;align-items:flex-start;padding:0 9mm}.caja{background:var(--fondo);border:1.2pt solid var(--tinta);padding:5mm 6mm}.caja .t{font-family:FMono;font-size:calc(17pt * var(--esc));text-transform:uppercase}.caja .a{font-family:FMono;font-size:9pt;margin-top:2mm}.caja .col{font-family:FMono;font-size:7pt;margin-top:3mm;color:var(--acento)}`,
@@ -226,6 +270,7 @@
 .contra .base{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:6mm}
 .contra .base small{font-size:7pt;letter-spacing:.12em;text-transform:uppercase;background:var(--fondo);padding:1mm}
 .contra .isbn{background:#fff;padding:1.5mm;width:38mm}
+.contra .logo{height:11mm;width:auto;display:block}
 .contra .isbn img{width:100%;display:block}`;
   }
 
@@ -254,7 +299,8 @@
   async function imprimible(p, opt = {}) {
     const modo = opt.modo || 'frente', k = opt.k || 11.811; // px por mm (11,81 = 300 ppp)
     const c = Folio.COLECCIONES.find(x => x.id === p.coleccion) || Folio.COLECCIONES[0];
-    const gen = c.generador, pal = c.paletas[p.cubierta.paleta % c.paletas.length];
+    const gen = c.generador, pal = (p.cubierta.colores && p.cubierta.colores.length === 3) ? p.cubierta.colores : c.paletas[(p.cubierta.paleta || 0) % c.paletas.length];
+    recActual = opt.recursos || {};
     const M = medidas(p, modo, opt.paginas, opt.sangrado ?? 3);
     const fx = modo === 'extendida' ? M.s + M.W + M.lomo : 0, fy = M.s;
     const cv = document.createElement('canvas'); cv.width = Math.round(M.total[0] * k); cv.height = Math.round(M.total[1] * k);
@@ -273,12 +319,12 @@
       const cod = p.isbn ? codigoISBN(p.isbn) : null;
       if (cod && cod.error) avisos.push(cod.error);
       if (M.lomo < 5) avisos.push('El lomo mide menos de 5 mm: no lleva texto.');
-      html += `<div class="contra" style="left:${M.s}mm;top:${fy}mm;width:${M.W}mm;height:${M.H}mm"><div class="texto">${esc(p.contracubierta)}</div><div class="base"><small>${esc(p.sello || '')}${p.sello ? ' · ' : ''}${esc(c.nombre)}</small>${cod && cod.src ? `<div class="isbn"><img src="${cod.src}" alt="ISBN ${esc(p.isbn)}"></div>` : ''}</div></div>`;
+      html += `<div class="contra" style="left:${M.s}mm;top:${fy}mm;width:${M.W}mm;height:${M.H}mm"><div class="texto">${esc(p.contracubierta)}</div><div class="base">${opt.logo ? `<img class="logo" src="${opt.logo}" alt="">` : ''}<small>${esc(p.sello || '')}${p.sello ? ' · ' : ''}${esc(c.nombre)}</small>${cod && cod.src ? `<div class="isbn"><img src="${cod.src}" alt="ISBN ${esc(p.isbn)}"></div>` : ''}</div></div>`;
     }
     html += `</div>`;
     const css = `@page{size:${M.total[0]}mm ${M.total[1]}mm;margin:0}html,body{margin:0}` + cssSistema(gen, fT, k);
-    return { html, css, mm: M.total, medidas: M, laminas: info.laminas, avisos };
+    return { html, css, mm: M.total, medidas: M, laminas: info.laminas, recorte: info.recorte, avisos, paleta: pal };
   }
 
-  window.Cubiertas = { imprimible, medidas, codigoISBN, tintar, cargarImg, GEN };
+  window.Cubiertas = { imprimible, medidas, codigoISBN, tintar, tintarSuave, cargarImg, GEN, Fragmento };
 })();
