@@ -1,0 +1,88 @@
+  • electron-builder  version=25.1.8 os=10.0.26100
+  • loaded configuration  file=package.json ("build" field)
+  • effective config  config=directories:
+  output: dist
+  buildResources: build
+appId: cl.jota.folio
+productName: Folio
+copyright: Joaquín Jiménez Salvador
+files:
+  - filter:
+      - main.js
+      - preload.js
+      - preload-imprimir.js
+      - app/**/*
+      - build/icono.png
+      - package.json
+win:
+  icon: build/icono.ico
+  target:
+    - portable
+    - nsis
+  artifactName: Folio-${version}-${arch}-${target}.${ext}
+portable:
+  artifactName: Folio-${version}-portatil.exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Folio-${version}-instalador.exe
+  shortcutName: Folio
+asar: false
+
+  • spawning        command=D:\a\Folio\Folio\node_modules\app-builder-bin\win\x64\app-builder.exe node-dep-tree --dir D:\a\Folio\Folio
+  • exited          command=app-builder.exe code=0 pid=6832 out=[{"dir":"D:\\a\\Folio\\Folio\\node_modules","deps":[{"name":"@babel/polyfill","version":"7.12.1"},{"name":"@babel/runtime","version":"7.29.10"},{"name":"@pdf-lib/standard-fonts","version":"1.0.0"},{"name":"@pdf-lib/upng","version":"1.0.1"},{"name":"ansi-regex","version":"5.0.1"},{"name":"ansi-styles","version":"4.3.0"},{"name":"bwip-js","version":"4.5.1"},{"name":"camelcase","version":"5.3.1"},{"name":"clear-cut","version":"2.0.2"},{"name":"cliui","version":"6.0.0"},{"name":"color-convert","version":"2.0.1"},{"name":"color-name","version":"1.1.4"},{"name":"core-js","version":"2.6.12"},{"name":"core-util-is","version":"1.0.3"},{"name":"css-tree","version":"1.1.3"},{"name":"d","version":"1.0.2"},{"name":"decamelize","version":"1.2.0"},{"name":"dictionary-es","version":"4.0.0"},{"name":"dijkstrajs","version":"1.0.3"},{"name":"emoji-regex","version":"8.0.0"},{"name":"es5-ext","version":"0.10.64"},{"name":"es6-iterator","version":"2.0.3"},{"name":"es6-symbol","version":"3.1.4"},{"name":"esniff","version":"2.0.1"},{"name":"event-emitter","version":"0.3.5"},{"name":"ext","version":"1.7.0"},{"name":"find-up","version":"4.1.0"},{"name":"get-caller-file","version":"2.0.5"},{"name":"hyphen","version":"1.10.6"},{"name":"immediate","version":"3.0.6"},{"name":"inherits","version":"2.0.4"},{"name":"is-buffer","version":"2.0.5"},{"name":"is-fullwidth-code-point","version":"3.0.0"},{"name":"isarray","version":"1.0.0"},{"name":"jszip","version":"3.10.1"},{"name":"lie","version":"3.3.0"},{"name":"locate-path","version":"5.0.0"},{"name":"mdn-data","version":"2.0.14"},{"name":"next-tick","version":"1.1.0"},{"name":"nspell","version":"2.1.5"},{"name":"p-limit","version":"2.3.0"},{"name":"p-locate","version":"4.1.0"},{"name":"p-try","version":"2.2.0"},{"name":"pagedjs","version":"0.4.3"},{"name":"pako","version":"1.0.11"},{"name":"path-exists","version":"4.0.0"},{"name":"pdf-lib","version":"1.17.1"},{"name":"pngjs","version":"5.0.0"},{"name":"process-nextick-args","version":"2.0.1"},{"name":"qrcode","version":"1.5.4"},{"name":"readable-stream","version":"2.3.8"},{"name":"regenerator-runtime","version":"0.13.11"},{"name":"require-directory","version":"2.1.1"},{"name":"require-main-filename","version":"2.0.0"},{"name":"safe-buffer","version":"5.1.2"},{"name":"set-blocking","version":"2.0.0"},{"name":"setimmediate","version":"1.0.5"},{"name":"source-map","version":"0.6.1"},{"name":"string-width","version":"4.2.3"},{"name":"string_decoder","version":"1.1.1"},{"name":"strip-ansi","version":"6.0.1"},{"name":"tslib","version":"1.14.1"},{"name":"type","version":"2.7.3"},{"name":"util-deprecate","version":"1.0.2"},{"name":"which-module","version":"2.0.1"},{"name":"wrap-ansi","version":"6.2.0"},{"name":"y18n","version":"4.0.3"},{"name":"yargs","version":"15.4.1"},{"name":"yargs-parser","version":"18.1.3"}]}]
+  • executing @electron/rebuild  electronVersion=33.2.1 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=33.2.1 appOutDir=dist\win-unpacked
+  • spawning        command=D:\a\Folio\Folio\node_modules\app-builder-bin\win\x64\app-builder.exe unpack-electron --configuration [{"platform":"win32","arch":"x64","version":"33.2.1"}] --output D:\a\Folio\Folio\dist\win-unpacked --distMacOsAppName Electron.app
+  • map async       taskCount=2
+  • map async       taskCount=1
+  • computing effective URL  initialUrl=https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64.zip
+                             currentUrl=https://release-assets.githubusercontent.com/github-production-release-asset/9384267/0da8d077-4653-4990-b127-b9c858587f9e?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-10-20T01%3A03%3A03Z&rscd=attachment%3B+filename%3Delectron-v33.2.1-win32-x64.zip&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-10-20T00%3A02%3A41Z&ske=2026-10-20T01%3A03%3A03Z&sks=b&skv=2018-11-09&sig=XfZoz0oQmu5DesKxqMJqiRnvraBi9ZgXyAx8IA450pc%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc5MjQ1OTE3OSwibmJmIjoxNzkyNDU1NTc5LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.jj9KvthE8aOMZ6la3LSrHOI7s9MLoWvBJgHphD-6Kvc&response-content-disposition=attachment%3B%20filename%3Delectron-v33.2.1-win32-x64.zip&response-content-type=application%2Foctet-stream
+  • downloading     url=https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64.zip length=115019899 contentType=application/octet-stream
+  • downloading     url=https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64.zip size=115 MB parts=8
+  • map async       taskCount=8
+  • download part   range=bytes=100642409-115019898 index=7
+  • download part   range=bytes=0-14377486 index=0
+  • download part   range=bytes=28754974-43132460 index=2
+  • download part   range=bytes=57509948-71887434 index=4
+  • download part   range=bytes=43132461-57509947 index=3
+  • download part   range=bytes=71887435-86264921 index=5
+  • download part   range=bytes=86264922-100642408 index=6
+  • download part   range=bytes=14377487-28754973 index=1
+  • downloaded      url=https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64.zip duration=417ms
+  • map async       taskCount=73
+  • exited          command=app-builder.exe code=0 pid=5924
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • spawning        command=D:\a\Folio\Folio\node_modules\app-builder-bin\win\x64\app-builder.exe node-dep-tree --dir D:\a\Folio\Folio --flatten
+  • exited          command=app-builder.exe code=0 pid=7624 out=[{"name":"@babel/polyfill","version":"7.12.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\@babel\\polyfill"},{"name":"@babel/runtime","version":"7.29.10","dir":"D:\\a\\Folio\\Folio\\node_modules\\@babel\\runtime"},{"name":"@pdf-lib/standard-fonts","version":"1.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\@pdf-lib\\standard-fonts"},{"name":"@pdf-lib/upng","version":"1.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\@pdf-lib\\upng"},{"name":"ansi-regex","version":"5.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\ansi-regex"},{"name":"ansi-styles","version":"4.3.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\ansi-styles"},{"name":"bwip-js","version":"4.5.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\bwip-js"},{"name":"camelcase","version":"5.3.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\camelcase"},{"name":"clear-cut","version":"2.0.2","dir":"D:\\a\\Folio\\Folio\\node_modules\\clear-cut"},{"name":"cliui","version":"6.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\cliui"},{"name":"color-convert","version":"2.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\color-convert"},{"name":"color-name","version":"1.1.4","dir":"D:\\a\\Folio\\Folio\\node_modules\\color-name"},{"name":"core-js","version":"2.6.12","dir":"D:\\a\\Folio\\Folio\\node_modules\\core-js"},{"name":"core-util-is","version":"1.0.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\core-util-is"},{"name":"css-tree","version":"1.1.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\css-tree"},{"name":"d","version":"1.0.2","dir":"D:\\a\\Folio\\Folio\\node_modules\\d"},{"name":"decamelize","version":"1.2.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\decamelize"},{"name":"dictionary-es","version":"4.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\dictionary-es"},{"name":"dijkstrajs","version":"1.0.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\dijkstrajs"},{"name":"emoji-regex","version":"8.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\emoji-regex"},{"name":"es5-ext","version":"0.10.64","dir":"D:\\a\\Folio\\Folio\\node_modules\\es5-ext"},{"name":"es6-iterator","version":"2.0.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\es6-iterator"},{"name":"es6-symbol","version":"3.1.4","dir":"D:\\a\\Folio\\Folio\\node_modules\\es6-symbol"},{"name":"esniff","version":"2.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\esniff"},{"name":"event-emitter","version":"0.3.5","dir":"D:\\a\\Folio\\Folio\\node_modules\\event-emitter"},{"name":"ext","version":"1.7.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\ext"},{"name":"find-up","version":"4.1.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\find-up"},{"name":"get-caller-file","version":"2.0.5","dir":"D:\\a\\Folio\\Folio\\node_modules\\get-caller-file"},{"name":"hyphen","version":"1.10.6","dir":"D:\\a\\Folio\\Folio\\node_modules\\hyphen"},{"name":"immediate","version":"3.0.6","dir":"D:\\a\\Folio\\Folio\\node_modules\\immediate"},{"name":"inherits","version":"2.0.4","dir":"D:\\a\\Folio\\Folio\\node_modules\\inherits"},{"name":"is-buffer","version":"2.0.5","dir":"D:\\a\\Folio\\Folio\\node_modules\\is-buffer"},{"name":"is-fullwidth-code-point","version":"3.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\is-fullwidth-code-point"},{"name":"isarray","version":"1.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\isarray"},{"name":"jszip","version":"3.10.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\jszip"},{"name":"lie","version":"3.3.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\lie"},{"name":"locate-path","version":"5.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\locate-path"},{"name":"mdn-data","version":"2.0.14","dir":"D:\\a\\Folio\\Folio\\node_modules\\mdn-data"},{"name":"next-tick","version":"1.1.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\next-tick"},{"name":"nspell","version":"2.1.5","dir":"D:\\a\\Folio\\Folio\\node_modules\\nspell"},{"name":"p-limit","version":"2.3.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\p-limit"},{"name":"p-locate","version":"4.1.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\p-locate"},{"name":"p-try","version":"2.2.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\p-try"},{"name":"pagedjs","version":"0.4.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\pagedjs"},{"name":"pako","version":"1.0.11","dir":"D:\\a\\Folio\\Folio\\node_modules\\pako"},{"name":"path-exists","version":"4.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\path-exists"},{"name":"pdf-lib","version":"1.17.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\pdf-lib"},{"name":"pngjs","version":"5.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\pngjs"},{"name":"process-nextick-args","version":"2.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\process-nextick-args"},{"name":"qrcode","version":"1.5.4","dir":"D:\\a\\Folio\\Folio\\node_modules\\qrcode"},{"name":"readable-stream","version":"2.3.8","dir":"D:\\a\\Folio\\Folio\\node_modules\\readable-stream"},{"name":"regenerator-runtime","version":"0.13.11","dir":"D:\\a\\Folio\\Folio\\node_modules\\regenerator-runtime"},{"name":"require-directory","version":"2.1.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\require-directory"},{"name":"require-main-filename","version":"2.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\require-main-filename"},{"name":"safe-buffer","version":"5.1.2","dir":"D:\\a\\Folio\\Folio\\node_modules\\safe-buffer"},{"name":"set-blocking","version":"2.0.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\set-blocking"},{"name":"setimmediate","version":"1.0.5","dir":"D:\\a\\Folio\\Folio\\node_modules\\setimmediate"},{"name":"source-map","version":"0.6.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\source-map"},{"name":"string-width","version":"4.2.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\string-width"},{"name":"string_decoder","version":"1.1.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\string_decoder"},{"name":"strip-ansi","version":"6.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\strip-ansi"},{"name":"tslib","version":"1.14.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\tslib"},{"name":"type","version":"2.7.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\type"},{"name":"util-deprecate","version":"1.0.2","dir":"D:\\a\\Folio\\Folio\\node_modules\\util-deprecate"},{"name":"which-module","version":"2.0.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\which-module"},{"name":"wrap-ansi","version":"6.2.0","dir":"D:\\a\\Folio\\Folio\\node_modules\\wrap-ansi"},{"name":"y18n","version":"4.0.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\y18n"},{"name":"yargs","version":"15.4.1","dir":"D:\\a\\Folio\\Folio\\node_modules\\yargs","conflictDependency":[{"name":"yargs-parser","version":"18.1.3","dir":"D:\\a\\Folio\\Folio\\node_modules\\yargs-parser"}]}]
+  • getPublishConfigsForUpdateInfo: no publishConfigs, detect using repository info
+  • calling getInfo  reason=owner or project is not specified explicitly provider=github owner=undefined project=undefined
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • spawning        command=D:\a\Folio\Folio\node_modules\app-builder-bin\win\x64\app-builder.exe icon --format ico --root D:\a\Folio\Folio\build --root D:\a\Folio\Folio --out D:\a\Folio\Folio\dist\.icon-ico --input build/icono.ico
+  • path doesn't exist  path=D:\a\Folio\Folio\build\build\icono.ico
+  • path resolved   path=D:\a\Folio\Folio\build\icono.ico outputFormat=ico
+  • cannot convert icon  error=image D:\a\Folio\Folio\build\icono.ico must be at least 256x256
+    github.com/develar/app-builder/pkg/icons.doConvertIcon
+    	/Users/runner/work/app-builder/app-builder/pkg/icons/icon-converter.go:190
+    github.com/develar/app-builder/pkg/icons.ConvertIcon
+    	/Users/runner/work/app-builder/app-builder/pkg/icons/icon-converter.go:56
+    github.com/develar/app-builder/pkg/icons.ConfigureCommand.func1
+    	/Users/runner/work/app-builder/app-builder/pkg/icons/icon-converter.go:33
+    github.com/alecthomas/kingpin.(*actionMixin).applyActions
+    	/Users/runner/go/pkg/mod/github.com/alecthomas/kingpin@v2.2.6+incompatible/actions.go:28
+    github.com/alecthomas/kingpin.(*Application).applyActions
+    	/Users/runner/go/pkg/mod/github.com/alecthomas/kingpin@v2.2.6+incompatible/app.go:557
+    github.com/alecthomas/kingpin.(*Application).execute
+    	/Users/runner/go/pkg/mod/github.com/alecthomas/kingpin@v2.2.6+incompatible/app.go:390
+    github.com/alecthomas/kingpin.(*Application).Parse
+    	/Users/runner/go/pkg/mod/github.com/alecthomas/kingpin@v2.2.6+incompatible/app.go:222
+    main.main
+    	/Users/runner/work/app-builder/app-builder/main.go:90
+    runtime.main
+    	/Users/runner/hostedtoolcache/go/1.21.13/arm64/src/runtime/proc.go:267
+    runtime.goexit
+    	/Users/runner/hostedtoolcache/go/1.21.13/arm64/src/runtime/asm_amd64.s:1650
+  • exited          command=app-builder.exe code=0 pid=5740 out={"error":"image D:\\a\\Folio\\Folio\\build\\icono.ico must be at least 256x256","errorCode":"ERR_ICON_TOO_SMALL"}
+  ⨯ image D:\a\Folio\Folio\build\icono.ico must be at least 256x256
