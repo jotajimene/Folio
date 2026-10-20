@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Vista del interior</title>
+<link rel="stylesheet" href="css/fuentes-libro.css">
+<style>
+  html{background:#d8cdb5}
+  body{margin:0;padding:24px 0 60px}
+  .pagedjs_pages{display:flex;flex-wrap:wrap;width:calc(var(--pagedjs-width) * 2);margin:0 auto;transform-origin:50% 0}
+  .pagedjs_page{background:#fffdf7;box-shadow:0 0 0 1px #1b1612;margin-bottom:28px;flex:none}
+  .pagedjs_first_page{margin-left:var(--pagedjs-width)}
+  .pagedjs_page.marcada{box-shadow:0 0 0 1px #1b1612,0 0 0 5px #a3321e}
+  .pagedjs_page::after{content:attr(data-page-number);position:absolute;bottom:-20px;left:0;right:0;text-align:center;font:italic 12px Fell,serif;color:#4a4036}
+  .pagedjs_page{position:relative}
+  #estado{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:italic 20px Fell,serif;color:#1b1612;pointer-events:none}
+</style>
+<script src="vendor/herramientas.js"></script>
+<script src="js/modelo.js"></script>
+<script src="js/archivo-datos.js"></script>
+<script src="js/libro.js"></script>
+<script src="vendor/paged.min.js"></script>
+<script src="js/paginar.js"></script>
+</head>
+<body>
+<div id="estado">Componiendo…</div>
+<div id="libro"></div>
+<script>
+(function () {
+  let zoom = 1, listo = false;
+  function aplicarZoom() { const p = document.querySelector('.pagedjs_pages'); if (p) { p.style.zoom = zoom; } }
+  addEventListener('message', async e => {
+    if (e.origin !== location.origin) return;
+    const m = e.data || {};
+    if (m.tipo === 'componer') {
+      try {
+        const r = await Paginar(document.getElementById('libro'), m.proyecto, m.recursos || {});
+        document.getElementById('estado').remove(); listo = true;
+        const pg = document.querySelector('.pagedjs_page');
+        zoom = (m.zoom === 'ajustar' || !m.zoom) && pg ? Math.max(.3, Math.min(1.2, (innerWidth - 48) / (2 * pg.offsetWidth))) : m.zoom; aplicarZoom();
+        parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones }, zoom }, location.origin);
+      } catch (err) { console.error(err); parent.postMessage({ tipo: 'error', error: String(err && err.message || err) }, location.origin); }
+    }
+    if (m.tipo === 'zoom') { zoom = m.k; aplicarZoom(); }
+    if (m.tipo === 'ir') {
+      const pg = document.querySelectorAll('.pagedjs_page')[m.pagina - 1];
+      document.querySelectorAll('.marcada').forEach(x => x.classList.remove('marcada'));
+      if (pg) { pg.classList.add('marcada'); pg.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    }
+  });
+  document.addEventListener('click', e => { const pg = e.target.closest('.pagedjs_page'); if (pg) parent.postMessage({ tipo: 'pagina', pagina: +pg.dataset.pageNumber }, location.origin); });
+  parent.postMessage({ tipo: 'vista-lista' }, location.origin);
+})();
+</script>
+</body>
+</html>

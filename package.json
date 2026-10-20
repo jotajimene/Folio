@@ -1,0 +1,66 @@
+{
+  "name": "folio",
+  "version": "2.0.0",
+  "description": "Folio: del manuscrito al libro impreso. Funciona sin internet.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "herramientas": "esbuild build/entrada-herramientas.js --bundle --format=iife --outfile=app/vendor/herramientas.js --minify",
+    "prueba": "electron pruebas/e2e.js",
+    "dist": "electron-builder --win portable nsis --x64"
+  },
+  "keywords": [],
+  "author": "Joaquín Jiménez Salvador",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bwip-js": "^4.5.1",
+    "dictionary-es": "^4.0.0",
+    "hyphen": "^1.10.6",
+    "jszip": "^3.10.1",
+    "nspell": "^2.1.5",
+    "pagedjs": "^0.4.3",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0"
+  },
+  "productName": "Folio",
+  "build": {
+    "appId": "cl.jota.folio",
+    "productName": "Folio",
+    "copyright": "Joaquín Jiménez Salvador",
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-imprimir.js",
+      "app/**/*",
+      "build/icono.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icono.ico",
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "artifactName": "Folio-${version}-${arch}-${target}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Folio-${version}-portatil.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Folio-${version}-instalador.exe",
+      "shortcutName": "Folio"
+    },
+    "asar": false
+  }
+}

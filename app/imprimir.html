@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Impresión</title>
+<link rel="stylesheet" href="css/fuentes-libro.css">
+<script src="vendor/herramientas.js"></script>
+<script src="js/modelo.js"></script>
+<script src="js/archivo-datos.js"></script>
+<script src="js/libro.js"></script>
+<script src="js/cubiertas.js"></script>
+<script src="vendor/paged.min.js"></script>
+<script src="js/paginar.js"></script>
+</head>
+<body style="margin:0">
+<div id="libro"></div>
+<script>
+// Ventana oculta: recibe el trabajo, compone y avisa que se puede imprimir a PDF.
+(function () {
+  async function hacer(t) {
+    try {
+      const destino = document.getElementById('libro');
+      if (t.tipo === 'cubierta') {
+        await ARCHIVO.cargar();
+        const r = await Cubiertas.imprimible(t.proyecto, { modo: t.modo || 'frente', recursos: t.recursos || {}, paginas: t.paginas, sangrado: t.sangrado ?? 3 });
+        const st = document.createElement('style'); st.textContent = r.css; document.head.appendChild(st);
+        destino.innerHTML = r.html;
+        await document.fonts.ready;
+        await Promise.all([...destino.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(res => { i.onload = i.onerror = res; })));
+        window.Impresion.listo({ paginas: 1, mm: r.mm });
+      } else {
+        const r = await Paginar(destino, t.proyecto, t.recursos || {});
+        window.Impresion.listo({ paginas: r.paginas, avisos: r.avisos });
+      }
+    } catch (e) { console.error(e); window.Impresion.listo({ error: String(e && e.message || e) }); }
+  }
+  if (window.Impresion) window.Impresion.alTrabajo(hacer);
+  else window.__hacer = hacer; // en navegador (pruebas)
+})();
+</script>
+</body>
+</html>
