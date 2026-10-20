@@ -4,6 +4,8 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -15,9 +17,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run herramientas
-      - run: npx electron-builder --win portable nsis --x64 --publish never
+      - name: Compilar
+        shell: bash
+        run: npx electron-builder --win portable nsis --x64 --publish never 2>&1 | tee compilacion.log; exit ${PIPESTATUS[0]}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          DEBUG: electron-builder
+      - name: Guardar el registro si falla
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "folio-ci"; git config user.email "ci@folio"
+          git checkout --orphan registro-compilacion
+          git rm -rfq --cached . ; git add -f compilacion.log
+          git commit -qm "Registro de la compilación fallida"
+          git push -f origin registro-compilacion
       - uses: actions/upload-artifact@v4
         with:
           name: Folio-Windows
