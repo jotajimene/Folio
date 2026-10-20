@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Folio: del manuscrito al libro impreso. Funciona sin internet.",
   "main": "main.js",
   "scripts": {
@@ -15,13 +15,16 @@
   "dependencies": {
     "bwip-js": "^4.5.1",
     "dictionary-es": "^4.0.0",
+    "extract-zip": "^2.0.1",
     "hyphen": "^1.10.6",
     "jszip": "^3.10.1",
     "node-llama-cpp": "^3.22.2",
     "nspell": "^2.1.5",
     "pagedjs": "^0.4.3",
     "pdf-lib": "^1.17.1",
-    "qrcode": "^1.5.4"
+    "potrace": "^2.1.8",
+    "qrcode": "^1.5.4",
+    "tex-linebreak": "^0.9.0"
   },
   "devDependencies": {
     "electron": "^33.2.1",
@@ -39,6 +42,8 @@
       "preload-imprimir.js",
       "modelo-local.js",
       "impresion.js",
+      "herramientas-externas.js",
+      "icc/**/*",
       "app/**/*",
       "build/icono.png",
       "package.json",
@@ -67,6 +72,15 @@
       "artifactName": "Folio-${version}-instalador.exe",
       "shortcutName": "Folio"
     },
-    "asar": false
+    "asar": false,
+    "extraResources": [
+      {
+        "from": "build/ghostscript",
+        "to": "ghostscript",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   }
 }

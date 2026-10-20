@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <title>Impresión</title>
 <link rel="stylesheet" href="css/fuentes-libro.css">
+<link rel="stylesheet" href="css/fuentes-libres.css">
 <script src="vendor/herramientas.js"></script>
 <script src="js/modelo.js"></script>
 <script src="js/archivo-datos.js"></script>
+<script src="js/facsimil-marcas.js"></script>
 <script src="js/libro.js"></script>
 <script src="js/cubiertas.js"></script>
 <script src="vendor/paged.min.js"></script>
@@ -22,12 +24,18 @@
       const destino = document.getElementById('libro');
       if (t.tipo === 'cubierta') {
         await ARCHIVO.cargar();
-        const r = await Cubiertas.imprimible(t.proyecto, { modo: t.modo || 'frente', recursos: t.recursos || {}, paginas: t.paginas, sangrado: t.sangrado ?? 3, logo: t.logo || null, marcas: t.marcas });
+        const r = await Cubiertas.imprimible(t.proyecto, { modo: t.modo || 'frente', recursos: t.recursos || {}, paginas: t.paginas, sangrado: t.sangrado ?? 3, logo: t.logo || null, marcas: t.marcas, vectores: t.vectores || [] });
         const st = document.createElement('style'); st.textContent = r.css; document.head.appendChild(st);
         destino.innerHTML = r.html;
         await document.fonts.ready;
         await Promise.all([...destino.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(res => { i.onload = i.onerror = res; })));
         window.Impresion.listo({ paginas: 1, mm: r.mm });
+      } else if (t.tipo === 'guardas') {
+        const [W, H] = Folio.FORMATOS[t.proyecto.formato] || Folio.FORMATOS.A5, src = (t.recursos || {})['guarda.png'] || '';
+        const st = document.createElement('style'); st.textContent = `@page{size:${W}mm ${H}mm;margin:0}html,body{margin:0}.g{width:${W}mm;height:${H}mm;break-after:page;overflow:hidden}.g img{width:100%;height:100%;object-fit:cover;display:block}`; document.head.appendChild(st);
+        destino.innerHTML = `<div class="g"><img src="${src}"></div><div class="g"><img src="${src}"></div>`;
+        await Promise.all([...destino.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(res => { i.onload = i.onerror = res; })));
+        window.Impresion.listo({ paginas: 2 });
       } else {
         const r = await Paginar(destino, t.proyecto, t.recursos || {}, t.opciones || {});
         window.Impresion.listo({ paginas: r.paginas, avisos: r.avisos });

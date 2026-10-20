@@ -12,6 +12,15 @@
   function cargarImg(src) {
     if (!src) return Promise.resolve(null);
     if (cache.has(src)) return cache.get(src);
+    if (src.startsWith('vector:')) {
+      const id = src.slice(7);
+      const p = fetch('folio://datos/vectores/' + id + '.svg').then(r => r.ok ? r.text() : Promise.reject()).then(t => {
+        const m = t.match(/width="(\d+(?:\.\d+)?)" height="(\d+(?:\.\d+)?)"/); const k = 4;
+        const svg = m ? t.replace(m[0], `width="${m[1] * k}" height="${m[2] * k}"`) : t;
+        return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace(/<svg /, '<svg style="background:#fff" ').replace(/(<svg[^>]*>)/, '$1<rect width="100%" height="100%" fill="#fff"/>')); });
+      }).catch(() => cargarImg(ARCHIVO.src(id)));
+      cache.set(src, p); return p;
+    }
     const p = new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
     cache.set(src, p); return p;
   }
@@ -46,8 +55,9 @@
   }
 
   // lámina elegida (o sorteada con la semilla). Para tapas solo se usan láminas limpias (sin cortes ni bordes de papel).
-  let recActual = {};
-  const srcDe = l => l.src || ARCHIVO.src(l.id);
+  let recActual = {}, vecActual = [];
+  // con vector (Potrace) disponible, la lámina se dibuja desde el SVG a 4 veces su tamaño: bordes limpios en la tapa
+  const srcDe = l => l.src || (vecActual.includes(l.id) ? 'vector:' + l.id : ARCHIVO.src(l.id));
   function laminaPara(p, gen, sem, n = 1) {
     if (!window.ARCHIVO || !ARCHIVO.listo) return [];
     // imagen propia (agregada al proyecto)
@@ -300,7 +310,7 @@
     const modo = opt.modo || 'frente', k = opt.k || 11.811; // px por mm (11,81 = 300 ppp)
     const c = Folio.COLECCIONES.find(x => x.id === p.coleccion) || Folio.COLECCIONES[0];
     const gen = c.generador, pal = (p.cubierta.colores && p.cubierta.colores.length === 3) ? p.cubierta.colores : c.paletas[(p.cubierta.paleta || 0) % c.paletas.length];
-    recActual = opt.recursos || {};
+    recActual = opt.recursos || {}; vecActual = opt.vectores || (window.App && App.vectores) || [];
     const M = medidas(p, modo, opt.paginas, opt.sangrado ?? 3);
     const fx = modo === 'extendida' ? M.s + M.W + M.lomo : 0, fy = M.s;
     const cv = document.createElement('canvas'); cv.width = Math.round(M.total[0] * k); cv.height = Math.round(M.total[1] * k);
@@ -326,5 +336,23 @@
     return { html, css, mm: M.total, medidas: M, laminas: info.laminas, recorte: info.recorte, avisos, paleta: pal };
   }
 
-  window.Cubiertas = { imprimible, medidas, codigoISBN, tintar, tintarSuave, cargarImg, GEN, Fragmento };
+  // guardas: un patrón a página completa con la paleta de la tapa
+  async function guarda(p, { k = 6, recursos = {} } = {}) {
+    const c = Folio.COLECCIONES.find(x => x.id === p.coleccion) || Folio.COLECCIONES[0];
+    const pal = (p.cubierta.colores && p.cubierta.colores.length === 3) ? p.cubierta.colores : c.paletas[(p.cubierta.paleta || 0) % c.paletas.length];
+    const [W, H] = Folio.FORMATOS[p.formato] || Folio.FORMATOS.A5;
+    const cv = document.createElement('canvas'); cv.width = Math.round(W * k); cv.height = Math.round(H * k);
+    const g = cv.getContext('2d'); const estilo = (p.guardas && p.guardas.estilo) || 'caleidoscopio';
+    recActual = recursos;
+    const fondo = estilo === 'liso' ? pal[1] : pal[0];
+    g.fillStyle = fondo; g.fillRect(0, 0, cv.width, cv.height);
+    const D = { W: cv.width, H: cv.height, fx: 0, fy: 0, fw: cv.width, fh: cv.height, k, sangrado: 0 };
+    const r = ARCHIVO.azar((p.cubierta.semilla || 1) * 977 + 3);
+    const q = { ...p, cubierta: { ...p.cubierta, imagen: null } };
+    if (estilo === 'caleidoscopio') await GEN.teselacion(g, D, [pal[0], pal[1], pal[2]], r, q);
+    else if (estilo === 'constelacion') await GEN.puntos(g, D, [pal[0], pal[1], pal[2]], r, q);
+    else if (estilo === 'texto') await GEN.texto(g, D, [pal[0], pal[1], pal[2]], r, p);
+    return cv.toDataURL('image/png');
+  }
+  window.Cubiertas = { guarda, imprimible, medidas, codigoISBN, tintar, tintarSuave, cargarImg, GEN, Fragmento };
 })();

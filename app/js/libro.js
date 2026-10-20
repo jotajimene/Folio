@@ -109,7 +109,7 @@
     const ids = new Set((p.ilustraciones || []).map(i => i.lamina).filter(Boolean));
     if (p.cubierta && p.cubierta.imagen) ids.add(p.cubierta.imagen);
     const fuentes = new Set();
-    for (const id of ids) { const f = cat.ficha(id); if (f) fuentes.add(`${f.fuente.obra || f.fuente.nombre} (${f.pagina.l || 'dominio público'})`); }
+    for (const id of ids) { const f = cat.ficha(id); if (f) fuentes.add(f.pagina.o ? `${f.pagina.o}, ${f.pagina.a || 'autor desconocido'} (${f.pagina.l || 'dominio público'}, Wikimedia Commons)` : `${f.fuente.obra || f.fuente.nombre} (${f.pagina.l || 'dominio público'})`); }
     return [...fuentes];
   }
 
@@ -118,12 +118,21 @@
     const ilus = {};
     for (const il of p.ilustraciones || []) (ilus[il.despuesDe] = ilus[il.despuesDe] || []).push(il);
     const out = []; let abierta = false, primero = true, nCap = 0;
-    const abrir = (titulo) => { if (abierta) out.push('</section>'); out.push(`<section class="capitulo${nCap === 0 ? ' inicio' : ''}">`); abierta = true; nCap++; };
-    const conGuion = p.ajustes.guionado && p.tipo !== 'poesia';
+    const port = p.ajustes.portadillas || 'no';
+    const laminaCap = k => { const l = (opt.vinetas || [])[k % Math.max(1, (opt.vinetas || []).length)]; return l ? srcLamina(l, opt) : ''; };
+    const abrir = (titulo, esCap) => {
+      if (abierta) out.push('</section>');
+      if (esCap && port === 'pagina' && laminaCap(nCap)) out.push(`<figure class="portadilla-ilus"><img src="${laminaCap(nCap)}" alt=""></figure>`);
+      out.push(`<section class="capitulo${nCap === 0 ? ' inicio' : ''}${esCap && port === 'pagina' ? ' tras-ilus' : ''}">`);
+      if (esCap && port === 'vineta' && laminaCap(nCap)) out.push(`<figure class="vineta-cap"><img src="${laminaCap(nCap)}" alt=""></figure>`);
+      abierta = true; nCap++;
+    };
+    const finaActiva = p.ajustes.justificacionFina !== false && p.ajustes.alineacion === 'justify' && p.tipo !== 'poesia';
+    const conGuion = p.ajustes.guionado && p.tipo !== 'poesia' && !finaActiva;
     for (const b of p.bloques) {
-      if (b.tipo === 'h1' || !abierta) abrir();
+      if (b.tipo === 'h1' || !abierta) abrir(b.texto, b.tipo === 'h1');
       const id = 'b-' + b.id;
-      const extra = (b.saltoAntes ? ' salto' : '') + (b.pegado ? ' pegado' : '') + (b.entero ? ' entero' : '');
+      const extra = (opt.finos && opt.finos[b.id] ? ' ' + opt.finos[b.id] : '') + (finaActiva && b.tipo === 'p' ? ' fina' : '') + (b.saltoAntes ? ' salto' : '') + (b.pegado ? ' pegado' : '') + (b.entero ? ' entero' : '');
       switch (b.tipo) {
         case 'h1': out.push(`<h1 class="titulo-cap${extra}" id="${id}" data-b="${b.id}">${enLinea(b, false)}</h1>`); primero = true; break;
         case 'h2': out.push(`<h2 class="${extra}" id="${id}" data-b="${b.id}">${enLinea(b, false)}</h2>`); primero = true; break;
@@ -138,8 +147,9 @@
     if (abierta) out.push('</section>');
     return out.join('');
   }
+  const srcLamina = (id, opt) => (opt.vectores && opt.vectores.includes(id) ? 'folio://datos/vectores/' + id + '.svg' : (/^X\d+$/.test(id) ? 'folio://datos/archivo/laminas/' : 'archivo/laminas/') + id + '.png');
   function figura(il, opt) {
-    const src = il.lamina ? 'archivo/laminas/' + il.lamina + '.png' : (opt.recursos && opt.recursos[il.recurso]) || '';
+    const src = il.lamina ? srcLamina(il.lamina, opt) : (opt.recursos && opt.recursos[il.recurso]) || '';
     if (il.modo === 'doble') return `<figure class="il il-doble izq" data-il="${il.id || ''}"><img src="${src}" alt=""></figure><figure class="il il-doble der" data-il="${il.id || ''}"><img src="${src}" alt=""></figure>`;
     if (il.modo === 'blanca') return `<div class="il il-blanca" data-il="${il.id || ''}"></div>`;
     return `<figure class="il il-${il.modo || 'media'}" data-il="${il.id || ''}"><img src="${src}" alt=""${il.lamina ? ` data-lamina="${il.lamina}"` : ''}>${il.pie ? `<figcaption>${esc(il.pie)}</figcaption>` : ''}</figure>`;
@@ -160,6 +170,40 @@
     if (CTX.ia) for (const b of p.bloques) { CTX.ia.re.lastIndex = 0; let m; while ((m = CTX.ia.re.exec(b.texto))) cuenta[CTX.ia.indice(m[0])]++; }
     const orden = ia.terminos.map((x, i) => ({ ...x, i })).sort((a, b) => a.t.localeCompare(b.t, 'es'));
     return `<section class="pre ia-indice"><h2 class="t-indice">Índice analítico</h2><ul>${orden.map(x => `<li data-ia-entrada="${x.i}"><span class="t">${esc(x.t)}</span>, <span class="pags">${Array(Math.min(12, Math.max(1, cuenta[x.i]))).fill('000').join(', ')}</span></li>`).join('')}</ul></section>`;
+  }
+  // ---- edición facsimilar: el original a la izquierda, la transcripción enfrentada a la derecha ----
+  function facsimil(p, opt) {
+    const fx = p.facsimil; if (!fx || !(fx.folios || []).length) return '';
+    const a = p.ajustes, [W, H] = Folio.FORMATOS[p.formato] || Folio.FORMATOS.A5;
+    const caja = { w: W - a.margenInterior - a.margenExterior, h: H - a.margenSuperior - a.margenInferior - 7 }; // 7 mm para la signatura
+    const lh = a.cuerpo * a.interlineado * 0.3528; // mm por línea
+    const modo = fx.modo || 'paleografica', cada = fx.numerarCada || 5;
+    return fx.folios.map((f, k) => {
+      const src = (opt.recursos || {})[f.recurso] || '';
+      const lineas = String(f.transcripcion || '').replace(/\r/g, '').split('\n');
+      const notas = [];
+      // escala de la imagen dentro de la caja (para alinear renglones con las guías)
+      const esc2 = Math.min(caja.w / (f.w || 1000), caja.h / (f.h || 1400)), altoImg = (f.h || 1400) * esc2, arriba = (caja.h - altoImg) / 2;
+      const guias = (f.guias || []).slice().sort((x, y) => x - y);
+      const alineado = fx.alinear !== false && guias.length >= Math.min(lineas.length, 2) && guias.length >= lineas.length;
+      let cuerpoT = 0, html = '';
+      if (alineado) {
+        const sep = Math.min(...guias.slice(1).map((g, i) => (g - guias[i]) * altoImg).filter(x => x > 0), 99);
+        cuerpoT = Math.max(5.5, Math.min(a.cuerpo, sep / (0.3528 * 1.15)));
+        html = lineas.map((l, i) => `<span class="l abs" style="top:${(arriba + guias[i] * altoImg - cuerpoT * 0.3528 * 0.85).toFixed(2)}mm"${(i + 1) % cada === 0 ? ` data-n="${i + 1}"` : ''}>${FacsimilMarcas.linea(l, modo, notas) || '&nbsp;'}</span>`).join('');
+      } else {
+        const caben = Math.floor(caja.h / lh);
+        cuerpoT = lineas.length > caben ? Math.max(6, a.cuerpo * caben / lineas.length) : a.cuerpo;
+        html = lineas.map((l, i) => `<span class="l"${(i + 1) % cada === 0 ? ` data-n="${i + 1}"` : ''}>${FacsimilMarcas.linea(l, modo, notas) || '&nbsp;'}</span>`).join('');
+      }
+      // que la línea más larga quepa a lo ancho (las líneas no se cortan: respetan el original)
+      const larga = Math.max(1, ...lineas.map(l => FacsimilMarcas.plano(l).length));
+      cuerpoT = Math.min(cuerpoT, (caja.w - 2) / (larga * 0.5 * 0.3528));
+      if (cuerpoT < 6) cuerpoT = 6;
+      const etq = esc(f.etiqueta || String(k + 1));
+      return `<figure class="fac-img" data-fol="${f.id}"><div class="fac-caja"><img src="${src}" alt="Facsímil, folio ${etq}"></div><figcaption>${etq}</figcaption></figure>
+        <div class="fac-txt${alineado ? ' alineado' : ''}" data-fol="${f.id}" style="font-size:${cuerpoT.toFixed(2)}pt"><div class="fac-lineas" style="height:${caja.h}mm">${html}</div><div class="fac-sig">${etq}</div></div>`;
+    }).join('');
   }
   function indice(p) {
     const caps = p.bloques.filter(b => b.tipo === 'h1');
@@ -193,7 +237,24 @@
 @page :blank{@bottom-center{content:none}@top-center{content:none}}
 @page lamina{@bottom-center{content:none}@top-center{content:none}}
 @page sangre{margin:0;@bottom-center{content:none}@top-center{content:none}}
-html{font-family:${f.texto},serif;font-size:${a.cuerpo}pt;line-height:${a.interlineado};color:#000;font-kerning:normal;font-variant-ligatures:common-ligatures}
+html{font-family:${f.texto},serif;font-size:${a.cuerpo}pt;line-height:${a.interlineado};color:#000;font-kerning:normal;font-variant-ligatures:${a.ligaduras === false ? 'no-common-ligatures' : 'common-ligatures'};font-variant-numeric:${a.cifrasAntiguas !== false && (Folio.RASGOS[f.texto] || {}).onum ? 'oldstyle-nums proportional-nums' : 'normal'};--lh:${(a.cuerpo * a.interlineado).toFixed(3)}pt}
+${a.versalitasInicio !== false && (Folio.RASGOS[f.texto] || {}).smcp && p.tipo !== 'poesia' ? 'p.primero::first-line{font-variant-caps:small-caps;letter-spacing:.03em}' : ''}
+p.fina{text-align:left;text-align-last:left}
+.apretar{letter-spacing:-.012em;word-spacing:-.04em}
+.aflojar{letter-spacing:.012em;word-spacing:.05em}
+.vineta-cap{margin:${Math.max(4, a.aireTitulo * .3)}mm auto 0;text-align:center;break-after:avoid}
+.vineta-cap img{max-width:48%;max-height:${Math.round((H - a.margenSuperior - a.margenInferior) * .28)}mm}
+.vineta-cap + .titulo-cap{margin-top:6mm}
+.portadilla-ilus{page:lamina;break-before:left;height:calc(${H}mm - ${a.margenSuperior + a.margenInferior}mm - 2mm);margin:0;display:flex;align-items:center;justify-content:center}
+.portadilla-ilus img{max-width:100%;max-height:100%;object-fit:contain}
+.capitulo.tras-ilus{break-before:right}
+section.guarda{page:sangre;break-before:page;width:${W}mm;height:${H}mm;margin:0;overflow:hidden}
+section.guarda img{width:100%;height:100%;object-fit:cover;display:block}
+${a.registro ? `.titulo-cap{line-height:calc(var(--lh) * 2) !important;margin:calc(var(--lh) * ${Math.max(2, Math.round(a.aireTitulo / (a.cuerpo * a.interlineado * .3528)))}) 0 calc(var(--lh) * 2) !important;padding:0 !important;border:0 !important}
+h2{line-height:var(--lh) !important;margin:var(--lh) 0 !important}
+p{margin:0 !important}
+blockquote,.estrofa,.sep,figure.il{margin-top:var(--lh) !important;margin-bottom:var(--lh) !important;line-height:var(--lh)}
+blockquote{font-size:1em !important}` : ''}
 body{margin:0}
 .pre{page:pre;break-before:right;position:relative}
 .portadilla{display:flex;flex-direction:column;justify-content:flex-start;padding-top:28%}
@@ -253,6 +314,23 @@ figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
 .indice a{color:inherit;text-decoration:none;flex:1;display:flex;align-items:baseline}
 .indice a::before{content:'';order:2;flex:1;border-bottom:.6pt dotted #000;margin:0 .3em;transform:translateY(-.25em)}
 .indice a::after{content:target-counter(attr(href), page);order:3}
+@page fac{@top-center{content:none}}
+.facsimiles{page:fac}
+.fac-img{break-before:left;margin:0;height:calc(${H}mm - ${a.margenSuperior + a.margenInferior}mm - 1mm);display:flex;flex-direction:column}
+.fac-caja{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+.fac-caja img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.fac-img figcaption{text-align:center;font-size:7.5pt;font-style:italic;height:7mm;padding-top:2mm}
+.fac-txt{break-before:right;break-after:page;font-family:${f.texto};text-align:left;hyphens:none;line-height:${a.interlineado}}
+.fac-lineas{position:relative;overflow:hidden}
+.fac-txt .l{display:block;position:relative;white-space:nowrap}
+.fac-txt .l.abs{position:absolute;left:0;right:0}
+.fac-txt .l[data-n]::before{content:attr(data-n);position:absolute;left:-7mm;width:5mm;text-align:right;font-size:.7em;color:#555;top:.15em}
+.fac-sig{text-align:center;font-size:7.5pt;font-style:italic;height:7mm;padding-top:2mm}
+.fx-del{text-decoration:line-through}
+.fx-add{font-size:.82em;vertical-align:.35em}
+.fx-dud{font-size:.75em;margin-left:.1em}
+.fx-il{font-style:italic;font-size:.9em}
+.fx-abr{font-style:italic}
 .seccion-n{font-family:${f.titulos};font-weight:400;font-size:${Math.max(18, a.tituloCuerpo)}pt;text-align:center;margin:1.6em 0 .6em;break-after:avoid}
 .ref-sec{color:inherit;text-decoration:none;font-weight:700}
 .ref-falta{color:#a3321e}
@@ -263,17 +341,26 @@ figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
 `;
   }
 
+  // láminas para las portadillas de capítulo: las elegidas o sorteadas entre las limpias (hierbas si es Herbario)
+  function vinetas(p) {
+    if (!p.ajustes.portadillas || p.ajustes.portadillas === 'no' || !window.ARCHIVO || !ARCHIVO.listo) return [];
+    if (p.portadillasLaminas && p.portadillasLaminas.length) return p.portadillasLaminas;
+    const n = p.bloques.filter(b => b.tipo === 'h1').length || 1;
+    const filtro = p.coleccion === 'herbario' ? (l => l.hb) : (l => l.q && l.tipo === 'figura' && l.w > 260);
+    return ARCHIVO.elegir(filtro, (p.cubierta.semilla || 1) * 131 + 17, n).map(l => l.id);
+  }
   function componer(p, opt = {}) {
     const c = Folio.COLECCIONES.find(x => x.id === p.coleccion) || Folio.COLECCIONES[0];
     const kT = p.ajustes.fuenteTexto || c.texto, kTi = p.ajustes.fuenteTitulos || c.titulos;
     const f = { texto: NOMBRE_FUENTE[kT] || kT, titulos: NOMBRE_FUENTE[kTi] || kTi };
     const caras = (p.fuentesPropias || []).filter(x => (opt.recursos || {})[x.recurso]).map(x => `@font-face{font-family:${x.clave};src:url(${opt.recursos[x.recurso]});font-style:${x.estilo};font-weight:${x.peso}}`).join('\n');
     const estilo = INTERIOR[c.id] || INTERIOR.bestiario;
-    const o = { estilo, recursos: opt.recursos || {} };
+    const o = { estilo, recursos: opt.recursos || {}, finos: opt.finos || null, vinetas: vinetas(p), vectores: p.ajustes.vectorizar === false ? null : (opt.vectores || null) };
     const final = p.indicePos === 'inicio';
     CTX = { lj: p.tipo === 'librojuego' || p.bloques.some(b => b.tipo === 'seccion') ? numerarLJ(p) : null, ia: prepararIA(p) };
-    const cuerpoHTML = cuerpo(p, o);
-    const html = preliminares(p) + (final ? indice(p) : '') + cuerpoHTML + (!final ? indice(p) : '') + indiceAnalitico(p) + colofon(p, f);
+    const cuerpoHTML = cuerpo(p, o) + (p.facsimil && (p.facsimil.folios || []).length ? `<section class="facsimiles">${facsimil(p, o)}</section>` : '');
+    const guarda = p.guardas && p.guardas.modo === 'libro' && (opt.recursos || {})['guarda.png'] ? `<section class="guarda"><img src="${opt.recursos['guarda.png']}" alt=""></section><section class="guarda"><img src="${opt.recursos['guarda.png']}" alt=""></section>` : '';
+    const html = guarda + preliminares(p) + (final ? indice(p) : '') + cuerpoHTML + (!final ? indice(p) : '') + indiceAnalitico(p) + colofon(p, f) + guarda.replace(/class="guarda"/g, 'class="guarda final"');
     CTX = { lj: null, ia: null };
     return { html, css: caras + '\n' + css(p, f, estilo) + (opt.imprenta ? '\n@page{bleed:3mm;marks:crop}' : ''), fuentes: f };
   }
@@ -305,5 +392,5 @@ figcaption{font-size:.8em;font-style:italic;margin-top:.5em;text-align:center}
     return { paginas: paginas.length, avisos, secciones, blancas };
   }
 
-  window.Libro = { numerarLJ, idSec, componer, comprobar, procedencias, creditos, preliminares, INTERIOR, esc, guionar };
+  window.Libro = { vinetas, numerarLJ, idSec, componer, comprobar, procedencias, creditos, preliminares, INTERIOR, esc, guionar };
 })();

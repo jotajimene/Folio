@@ -14,7 +14,8 @@
     const d = g.getImageData(0, 0, w, h), a = d.data, L = new Float32Array(w * h);
     for (let i = 0; i < w * h; i++) L[i] = a[4 * i] * .3 + a[4 * i + 1] * .59 + a[4 * i + 2] * .11;
     const out = new Uint8ClampedArray(w * h);
-    if (modo === 'grabado') {
+    if (modo === 'gris') { for (let i = 0; i < w * h; i++) out[i] = L[i]; }
+    else if (modo === 'grabado') {
       // umbral adaptativo con imagen integral (como el archivo) + trama de líneas en los medios tonos
       const I = new Float64Array((w + 1) * (h + 1));
       for (let y = 0; y < h; y++) { let s = 0; for (let x = 0; x < w; x++) { s += L[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + s; } }
@@ -49,22 +50,23 @@
   async function agregar({ titulo = 'Agregar tu imagen', archivo } = {}) {
     const f = archivo || await new Promise(res => { const inp = document.getElementById('entrada-imagen'); inp.value = ''; inp.accept = '.png,.jpg,.jpeg,.webp'; inp.onchange = () => res(inp.files[0] || null); inp.click(); });
     if (!f) return null;
-    const src = await App.leerDataURL(f); const img = await cargar(src);
+    const src = await App.leerDataURL(f); let img = await cargar(src);
     let modo = 'original', fuerza = 0.5;
     const r = await App.modal({
       titulo, ancho: 760,
-      cuerpo: `<div class="tratamientos"><div class="previa-trat"><canvas></canvas></div><div><div class="sub">Tratamiento</div>${[['original', 'Tal cual'], ['grabado', 'Grabado (tinta)'], ['semitono', 'Semitono'], ['linea', 'Línea']].map(([k, v]) => `<label class="chequeo"><input type="radio" name="trat" value="${k}" ${k === 'original' ? 'checked' : ''}> ${v}</label>`).join('')}<label class="ajuste"><span>Intensidad</span><input type="range" min="0" max="1" step="0.05" value="0.5" class="fuerza"></label><p class="nota">${esc(f.name)} · ${img.naturalWidth}×${img.naturalHeight} px. Queda guardada dentro del proyecto.</p></div></div>`,
+      cuerpo: `<div class="tratamientos"><div class="previa-trat"><canvas></canvas></div><div><div class="sub">Tratamiento</div>${[['original', 'Tal cual'], ['grabado', 'Grabado (tinta)'], ['semitono', 'Semitono'], ['linea', 'Línea']].map(([k, v]) => `<label class="chequeo"><input type="radio" name="trat" value="${k}" ${k === 'original' ? 'checked' : ''}> ${v}</label>`).join('')}<label class="ajuste"><span>Intensidad</span><input type="range" min="0" max="1" step="0.05" value="0.5" class="fuerza"></label><p class="nota tam">${esc(f.name)} · ${img.naturalWidth}×${img.naturalHeight} px. Queda guardada dentro del proyecto.</p>${window.Escritorio && Escritorio.herr ? '<button class="boton chico" data-ampliar title="Real-ESRGAN, en este computador: para fotos chicas que se verían borrosas impresas">Ampliar ×4 sin perder nitidez</button>' : ''}</div></div>`,
       botones: [{ texto: 'Cancelar', valor: null }, { texto: 'Usar esta imagen', taco: true, valor: 'ok' }],
       alAbrir: m => {
         const cv = m.querySelector('canvas');
         const pintar = () => { const t = tratar(img, modo, fuerza, 700); cv.width = t.width; cv.height = t.height; cv.getContext('2d').drawImage(t, 0, 0); };
         m.addEventListener('change', e => { if (e.target.name === 'trat') { modo = e.target.value; pintar(); } });
         m.addEventListener('input', e => { if (e.target.classList.contains('fuerza')) { fuerza = +e.target.value; pintar(); } });
+        m.addEventListener('click', async e => { const b = e.target.closest('[data-ampliar]'); if (!b) return; b.disabled = true; b.textContent = 'Ampliando…'; try { const u = await HerrLocal.ampliar(img.src); if (u) { img = await cargar(u); m.querySelector('.tam').textContent = `${f.name} · ampliada a ${img.naturalWidth}×${img.naturalHeight} px.`; pintar(); b.textContent = 'Ampliada'; } else { b.disabled = false; b.textContent = 'Ampliar ×4 sin perder nitidez'; } } catch (err) { App.aviso('No se pudo ampliar: ' + err.message, { tipo: 'mal' }); b.disabled = false; b.textContent = 'Ampliar ×4 sin perder nitidez'; } });
         pintar();
       },
     });
     if (r !== 'ok') return null;
-    const final = tratar(img, modo, fuerza);
+    const final = tratar(img, modo, fuerza, img.naturalWidth > 2400 ? 4800 : 2400);
     const nombre = 'img-' + Date.now().toString(36) + (modo === 'original' ? '.jpg' : '.png');
     Folio.recursos[nombre] = modo === 'original' ? final.toDataURL('image/jpeg', .92) : final.toDataURL('image/png');
     return { nombre, w: final.width, h: final.height, modo };

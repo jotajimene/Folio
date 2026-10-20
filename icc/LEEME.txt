@@ -1,0 +1,3 @@
+FOGRA39L_coated.icc: perfil CMYK para offset estucado (FOGRA39, ISO 12647-2).
+Generado por el proyecto colord a partir de los datos públicos de FOGRA. Dice: "This profile is free of known copyright restrictions".
+Tomado del paquete colorprofiles de TeX Live.

@@ -13,6 +13,9 @@
     const p = Folio.p;
     const r = await Cubiertas.imprimible(p, { modo, k: 3.2, recursos: Folio.recursos, paginas: (p.composicion && p.composicion.paginas) || estimarPaginas(), logo: Perfil.datos.logo });
     if (t !== turno) return;
+    // las láminas que usó la tapa se vectorizan (una vez) y se vuelve a dibujar con bordes limpios
+    const sinVector = (r.laminas || []).filter(id => /^L\d+$/.test(id) && !App.vectores.includes(id));
+    if (sinVector.length && window.Escritorio && Escritorio.herr) { App.asegurarVectores(sinVector).then(() => { if (t === turno) dibujar(); }).catch(() => {}); }
     ultimo = r;
     const raiz = caja.shadowRoot || caja.attachShadow({ mode: 'open' });
     raiz.innerHTML = `<style>${r.css.replace(/@page[^}]*}/, '')} :host{display:block} .cub{box-shadow:5px 5px 0 #1b1612;outline:2px solid #1b1612}</style>${r.html}`;

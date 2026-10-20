@@ -3,7 +3,7 @@
   'use strict';
   let capa = null, marco = null;
   function abrir() {
-    if (!Folio.p.bloques.length) return App.aviso('No hay libro que hojear.');
+    if (!Folio.tieneContenido()) return App.aviso('No hay libro que hojear.');
     capa = document.createElement('div'); capa.className = 'hojear-capa';
     capa.innerHTML = `<div class="hojear-barra"><span>${App.esc(Folio.p.titulo || 'Libro')}</span><span class="hojear-n">componiendo…</span><button class="boton chico" data-h="-1">←</button><button class="boton chico" data-h="1">→</button><button class="boton chico" data-h="cerrar">Cerrar</button></div>`;
     marco = document.createElement('iframe'); marco.src = 'vista.html'; marco.className = 'hojear-marco'; capa.appendChild(marco);

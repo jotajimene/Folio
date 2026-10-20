@@ -17,6 +17,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run herramientas
+      - name: Ghostscript para PDF/X (AGPL), dentro del paquete
+        shell: pwsh
+        run: |
+          choco install ghostscript --no-progress -y
+          $gs = Get-ChildItem 'C:\Program Files\gs' -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          New-Item -ItemType Directory -Force build/ghostscript | Out-Null
+          Copy-Item -Recurse "$($gs.FullName)\bin" build/ghostscript/bin
+          Copy-Item -Recurse "$($gs.FullName)\lib" build/ghostscript/lib
+          if (Test-Path "$($gs.FullName)\Resource") { Copy-Item -Recurse "$($gs.FullName)\Resource" build/ghostscript/Resource }
+          if (Test-Path "$($gs.FullName)\iccprofiles") { Copy-Item -Recurse "$($gs.FullName)\iccprofiles" build/ghostscript/iccprofiles }
+          & build/ghostscript/bin/gswin64c.exe -v
       - name: Compilar
         shell: bash
         run: npx electron-builder --win portable nsis --x64 --publish never 2>&1 | tee compilacion.log; exit ${PIPESTATUS[0]}

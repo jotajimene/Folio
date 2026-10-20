@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Vista del interior</title>
 <link rel="stylesheet" href="css/fuentes-libro.css">
+<link rel="stylesheet" href="css/fuentes-libres.css">
 <style>
   html{background:#d8cdb5}
   body{margin:0;padding:24px 0 60px}
@@ -13,7 +14,7 @@
   .pagedjs_page.marcada{box-shadow:0 0 0 1px #1b1612,0 0 0 5px #a3321e}
   .pagedjs_page::after{content:attr(data-page-number);position:absolute;bottom:-20px;left:0;right:0;text-align:center;font:italic 12px Fell,serif;color:#4a4036}
   .pagedjs_page{position:relative}
-  [data-b],[data-il]{cursor:pointer}
+  [data-b],[data-il],[data-fol]{cursor:pointer}
   [data-b]:hover,[data-il]:hover{outline:1px dashed rgba(163,50,30,.6);outline-offset:2px}
   .elegido{outline:2px solid #a3321e !important;outline-offset:2px;background:rgba(163,50,30,.06)}
   body.hojear{padding:0;overflow:hidden;background:#2b2520;height:100vh}
@@ -33,6 +34,7 @@
 <script src="vendor/herramientas.js"></script>
 <script src="js/modelo.js"></script>
 <script src="js/archivo-datos.js"></script>
+<script src="js/facsimil-marcas.js"></script>
 <script src="js/libro.js"></script>
 <script src="vendor/paged.min.js"></script>
 <script src="js/paginar.js"></script>
@@ -49,12 +51,12 @@
     const m = e.data || {};
     if (m.tipo === 'componer') {
       try {
-        const r = await Paginar(document.getElementById('libro'), m.proyecto, m.recursos || {});
+        const r = await Paginar(document.getElementById('libro'), m.proyecto, m.recursos || {}, m.opciones || {});
         document.getElementById('estado').remove(); listo = true;
         const pg = document.querySelector('.pagedjs_page');
         if (m.modo === 'hojear') { hojear(); parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones, blancas: r.blancas }, zoom: 1 }, location.origin); return; }
         zoom = (m.zoom === 'ajustar' || !m.zoom) && pg ? Math.max(.3, Math.min(1.2, (innerWidth - 48) / (2 * pg.offsetWidth))) : m.zoom; aplicarZoom();
-        parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones, blancas: r.blancas }, zoom }, location.origin);
+        parent.postMessage({ tipo: 'compuesto', resultado: { paginas: r.paginas, avisos: r.avisos, secciones: r.secciones, blancas: r.blancas, arreglosFinos: r.arreglosFinos, ajustados: r.ajustados }, zoom }, location.origin);
       } catch (err) { console.error(err); parent.postMessage({ tipo: 'error', error: String(err && err.message || err) }, location.origin); }
     }
     if (m.tipo === 'zoom') { zoom = m.k; aplicarZoom(); }
@@ -89,7 +91,8 @@
   document.addEventListener('click', e => {
     if (document.body.classList.contains('hojear')) { mostrar(ip + (e.clientX > innerWidth / 2 ? 1 : -1), e.clientX > innerWidth / 2 ? 1 : -1); return; }
     const pg = e.target.closest('.pagedjs_page'); if (!pg) return;
-    const b = e.target.closest('[data-b]'), il = e.target.closest('[data-il]');
+    const b = e.target.closest('[data-b]'), il = e.target.closest('[data-il]'), fol = e.target.closest('[data-fol]');
+    if (fol) { parent.postMessage({ tipo: 'folio', id: fol.dataset.fol }, location.origin); return; }
     document.querySelectorAll('.elegido').forEach(x => x.classList.remove('elegido'));
     if (il && il.dataset.il) { document.querySelectorAll(`[data-il="${il.dataset.il}"]`).forEach(x => x.classList.add('elegido')); parent.postMessage({ tipo: 'grabado', id: il.dataset.il, pagina: +pg.dataset.pageNumber }, location.origin); return; }
     if (b) { document.querySelectorAll(`[data-b="${b.dataset.b}"]`).forEach(x => x.classList.add('elegido')); parent.postMessage({ tipo: 'bloque', id: b.dataset.b, pagina: +pg.dataset.pageNumber }, location.origin); return; }

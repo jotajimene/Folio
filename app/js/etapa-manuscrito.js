@@ -101,6 +101,21 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
       if (!p.titulo) { const h = nuevos.find(b => b.tipo === 'h1'); if (h) p.titulo = h.texto; }
     });
   }
+  // dictado o audio: se transcribe en este computador y llega a una ventana para revisarlo antes de entrar
+  async function deVoz(fuente) {
+    let t; try { t = fuente === 'archivo' ? await HerrLocal.transcribirArchivo() : await HerrLocal.dictar(); } catch (e) { return App.aviso('No se pudo transcribir: ' + e.message, { tipo: 'mal', ms: 8000 }); }
+    if (!t) return;
+    const hay = Folio.p.bloques.length, despues = sel && Folio.p.bloques.find(b => b.id === sel);
+    const r = await App.modal({ titulo: fuente === 'archivo' ? 'Transcripción del audio' : 'Lo que dictaste', ancho: 720, cuerpo: `<p class="nota">Revísalo y corrígelo aquí. Entra al manuscrito ${hay ? (despues ? 'después del bloque elegido' : 'al final') : 'como texto nuevo'} solo si lo aceptas.</p><textarea class="area" rows="14">${esc(t)}</textarea>`, botones: [{ texto: 'Descartar', valor: null }, { texto: 'Poner en el manuscrito', taco: true, valor: c => c.querySelector('textarea').value }] });
+    if (!r || !r.trim()) return;
+    const nuevos = bloquesDesde(FolioImport.textBlocks(r));
+    Folio.cambiar('importar', p => {
+      if (!p.bloques.length) Perfil.aplicar(p);
+      const i = despues ? p.bloques.findIndex(b => b.id === despues.id) + 1 : p.bloques.length;
+      p.bloques.splice(i, 0, ...nuevos); p.original.push(...nuevos.map(b => ({ ...b })));
+      p.origen = { archivos: [...(p.origen?.archivos || []), { nombre: fuente === 'archivo' ? 'Audio transcrito' : 'Dictado', bytes: r.length, fecha: new Date().toISOString() }], avisos: p.origen?.avisos || [], informes: p.origen?.informes || [] };
+    });
+  }
   function ejemplo() {
     const nuevos = bloquesDesde(FolioImport.textBlocks(EJEMPLO));
     Folio.cambiar('importar', p => { Perfil.aplicar(p); p.bloques = nuevos; p.original = nuevos.map(b => ({ ...b })); p.origen = { archivos: [{ nombre: 'Ejemplo de Folio', bytes: EJEMPLO.length, fecha: new Date().toISOString() }], avisos: ['Texto de ejemplo con errores a propósito, para probar la revisión.'], informes: [] }; if (!p.titulo) p.titulo = 'La casa de las horas'; if (!p.autor) p.autor = 'Autora de ejemplo'; });
@@ -217,11 +232,13 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
   // ---------- vistas ----------
   function puerta() {
     const esc2 = (window.BESTIARIO || []).filter(f => f.rol === 'escena'); const e = esc2[(Math.random() * esc2.length) | 0] || {};
-    return { cols: '1fr', html: panel('puerta', 'La puerta del manuscrito', 'nada cambia sin tu permiso', `<div class="vacio"><figure class="marco-escena"><img src="${e.src || ''}" alt="" title="${esc(e.ficha || '')}"></figure><h2>Trae tu manuscrito</h2><p>Arrástralo aquí: Word, PDF, OpenDocument, RTF, texto, Markdown, HTML o fotos de páginas.</p><div><button class="boton taco" data-m="elegir">Elegir archivo</button> <button class="boton" data-m="escaneo">Leer páginas escaneadas</button> <button class="boton" data-m="pegar">Pegar texto</button> <button class="boton" data-m="abrir">Abrir un proyecto</button> <button class="boton" data-m="fotolibro">Hacer un fotolibro</button></div><p class="nota" style="margin-top:14px"><button class="enlace" data-m="ejemplo">o prueba con un texto de ejemplo</button></p>${Estanteria.mini()}</div>`, '', 'texto-panel') };
+    return { cols: '1fr', html: panel('puerta', 'La puerta del manuscrito', 'nada cambia sin tu permiso', `<div class="vacio"><figure class="marco-escena"><img src="${e.src || ''}" alt="" title="${esc(e.ficha || '')}"></figure><h2>Trae tu manuscrito</h2><p>Arrástralo aquí: Word, PDF, OpenDocument, RTF, texto, Markdown, HTML o fotos de páginas.</p><div><button class="boton taco" data-m="elegir">Elegir archivo</button> <button class="boton" data-m="escaneo">Leer páginas escaneadas</button> <button class="boton" data-m="pegar">Pegar texto</button> <button class="boton" data-m="abrir">Abrir un proyecto</button> <button class="boton" data-m="fotolibro">Hacer un fotolibro</button> <button class="boton" data-m="facsimil">Edición facsimilar</button> <button class="boton" data-m="dictar">Dictar</button> <button class="boton" data-m="audio">Transcribir un audio</button></div><p class="nota" style="margin-top:14px"><button class="enlace" data-m="ejemplo">o prueba con un texto de ejemplo</button></p>${Estanteria.mini()}</div>`, '', 'texto-panel') };
   }
   function render() {
     const p = Folio.p;
-    if (!p.bloques.length) return puerta();
+    if (Facsimil.activo()) return Facsimil.render();
+    if (!p.bloques.length && !(p.facsimil && p.facsimil.folios && p.facsimil.folios.length)) return puerta();
+    if (!p.bloques.length) return { cols: '1fr', html: panel('puerta', 'Texto de acompañamiento', 'prólogo, estudio, notas', `<div class="vacio"><h2>Un texto que acompañe la edición</h2><p>Un prólogo, un estudio preliminar o criterios de transcripción. Va antes de los folios.</p><div><button class="boton taco" data-m="elegir">Importar un archivo</button> <button class="boton" data-m="pegar">Pegar texto</button> <button class="boton" data-m="a-folios">Volver a los folios</button></div></div>`, '', 'texto-panel') };
     const secciones = []; let actual = null;
     p.bloques.forEach((b, i) => { const enc = b.tipo === 'h1' || b.tipo === 'h2' || b.tipo === 'seccion'; if (enc || !actual) { actual = { id: b.id, t: enc ? (b.tipo === 'seccion' ? '§ ' + b.texto : b.texto) : '(inicio)', nivel: b.tipo === 'h1' ? 'h1' : 'h2', n: 0 }; secciones.push(actual); } actual.n++; });
     const palabras = p.bloques.reduce((a, b) => a + (b.texto.match(/\S+/g) || []).length, 0);
@@ -239,13 +256,15 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
         panel('origen', 'Origen', esc((o.archivos[0] || {}).nombre || ''), `<div class="ficha">${o.archivos.map(a => `<p>${esc(a.nombre)} <span class="dim">· ${new Date(a.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</span></p>`).join('')}<p class="dim">El original queda guardado dentro del proyecto.</p>
           ${o.avisos.length || ocrBaja.length ? `<div class="sub">Avisos de la importación</div><ul class="avisos">${o.avisos.map(a => `<li>${esc(a)}</li>`).join('')}${ocrBaja.map(r => `<li>OCR p. ${r.page}: confianza ${r.confidence} %</li>`).join('')}</ul>` : ''}
           <div class="sub">Tipo de libro</div><div class="fila-botones">${Object.entries(Folio.TIPOS_LIBRO).map(([k, t]) => `<button class="boton chico ${p.tipo === k ? 'taco' : ''}" data-tipo-libro="${k}">${t.nombre}</button>`).join('')}</div>
+          ${p.tipo === 'facsimil' ? '<button class="boton" data-m="a-folios" style="width:100%;margin:8px 0">Volver a los folios</button>' : ''}
           <div class="sub">Versiones</div>${Versiones.lista().length ? `<ul class="lista">${Versiones.lista().slice(0, 8).map(v => `<li data-version="${v.id}"><a>${esc(v.nombre)}</a> <span>${new Date(v.fecha).toLocaleDateString('es-CL')}</span></li>`).join('')}</ul>` : '<p class="nota">Guarda un estado con nombre para comparar o volver después.</p>'}<button class="boton chico" data-m="version">Guardar una versión</button>
-          <div class="sub">Herramientas</div><div class="fila-botones"><button class="boton chico" data-m="exportar-word">Enviar a corrección (.docx)</button><button class="boton chico" data-m="importar-word">Traer la corrección</button><button class="boton chico" data-m="indice-analitico">Índice analítico</button>${Folio.p.tipo === 'librojuego' ? '<button class="boton chico" data-m="librojuego">Secciones del librojuego</button>' : ''}</div>
+          <div class="sub">Herramientas</div><div class="fila-botones"><button class="boton chico" data-m="exportar-word">Enviar a corrección (.docx)</button><button class="boton chico" data-m="importar-word">Traer la corrección</button><button class="boton chico" data-m="indice-analitico">Índice analítico</button><button class="boton chico" data-m="nombres">Nombres y personajes</button><button class="boton chico" data-m="radiografia">Radiografía del texto</button><button class="boton chico" data-m="dictar">Dictar aquí</button><button class="boton chico" data-m="audio">Transcribir un audio</button>${Folio.p.tipo === 'librojuego' ? '<button class="boton chico" data-m="librojuego">Secciones del librojuego</button>' : ''}</div>
           <div class="pila"><button class="boton" data-m="anadir">Añadir otro archivo al final</button><button class="boton" data-m="pegar-anadir">Pegar texto al final</button><button class="boton" data-m="reemplazar">Reemplazar el manuscrito…</button><button class="boton" data-m="exportar">Exportar el texto (.txt)</button></div></div>`, App.seguir(1, 'Revisar el texto →')),
     };
   }
 
   function montar(m) {
+    if (Facsimil.activo()) return Facsimil.montar(m);
     m.addEventListener('click', async e => {
       const b = e.target.closest('[data-m]');
       const bloque = e.target.closest('.bloque');
@@ -258,6 +277,8 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
           case 'pegar-anadir': return pegar('anadir');
           case 'abrir': return App.abrir();
           case 'ejemplo': return ejemplo();
+          case 'a-folios': return Folio.cambiar('facsimil:vista', p => { p.facsimil.editarTexto = false; });
+          case 'facsimil': { Folio.cambiar('facsimil:vista', p => { Perfil.aplicar(p); p.tipo = 'facsimil'; p.facsimil = p.facsimil || { folios: [], modo: 'paleografica', numerarCada: 5 }; p.facsimil.editarTexto = false; }); return Facsimil.elegir(); }
           case 'fotolibro': { const lista = await Imagenes.agregarVarias(); if (!lista.length) return; Folio.cambiar('importar', p => { Perfil.aplicar(p); const h = { id: Folio.uid(), tipo: 'h1', texto: p.titulo || 'Fotolibro', runs: null }; p.bloques = [h]; p.original = [{ ...h }]; p.tipo = 'ilustrado'; p.titulo = p.titulo || 'Fotolibro'; p.ilustraciones = lista.map(im => ({ id: Folio.uid(), recurso: im.nombre, despuesDe: h.id, modo: 'sangre', pie: '' })); p.origen = { archivos: [{ nombre: lista.length + ' imágenes', bytes: 0, fecha: new Date().toISOString() }], avisos: ['Fotolibro: ordena la secuencia y elige cómo va cada imagen en Interior.'], informes: [] }; }); return App.ir(3); }
           case 'anadir': return elegirArchivo({ modo: 'anadir' });
           case 'reemplazar': if (await App.confirmar('Reemplazar el manuscrito borra los bloques actuales, sus correcciones y las ilustraciones colocadas. Puedes deshacerlo con Ctrl+Z.', 'Elegir el archivo nuevo')) elegirArchivo({}); return;
@@ -275,6 +296,10 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
           case 'importar-word': return Corrector.importar();
           case 'indice-analitico': return IndiceAnalitico.ventana();
           case 'librojuego': return Librojuego.ventana();
+          case 'nombres': return Escritura.ventanaNombres();
+          case 'radiografia': return Escritura.ventanaRadiografia();
+          case 'dictar': return deVoz('micro');
+          case 'audio': return deVoz('archivo');
           case 'titulos': return proponerTitulos(id);
           case 'unir': { const i = Folio.p.bloques.findIndex(x => x.id === id); terminar(true); return Folio.cambiar('texto:unir', p => Folio.texto.unir(p, i)); }
           case 'eliminar': { const i = Folio.p.bloques.findIndex(x => x.id === id); sel = null; Folio.cambiar('texto:eliminar', p => { p.bloques.splice(i, 1); p.ilustraciones = (p.ilustraciones || []).map(il => il.despuesDe === id ? { ...il, despuesDe: (p.bloques[i - 1] || p.bloques[0] || {}).id } : il); }); return App.aviso('Bloque eliminado.', { accion: { texto: 'Deshacer', hacer: () => Folio.deshacerUltimo() } }); }
@@ -316,7 +341,7 @@ Anoté las cosas que habían quedado: tres tazas, una lámpara sin ampolleta, un
     indice: 0, n: 'I', nombre: 'Manuscrito',
     estado: () => Folio.p.bloques.length ? `${Folio.p.bloques.length} bloques` : 'sin texto',
     render, montar,
-    alCambiar(motivo) { if (motivo === 'importar' || motivo === 'cargar') { sel = null; } },
+    alCambiar(motivo) { if (motivo === 'facsimil:texto') return false; if (motivo === 'importar' || motivo === 'cargar') { sel = null; } },
     salir() { terminar(true); },
     importar, ejemplo, htmlBloque, leerRuns,
   });

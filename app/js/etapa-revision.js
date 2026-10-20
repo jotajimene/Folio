@@ -8,6 +8,40 @@
   const { esc, panel } = App;
   let trabajador = null, pedido = 0, obs = [], filtro = 'Todas', idx = 0, estado = 'sin-revisar', ultimoTiempo = 0, revisadoDe = null;
 
+  // ---- LanguageTool (opcional, corre en este computador) ----
+  let lt = [], ltEstado = null;
+  const ltVigentes = id => lt.filter(o => (!id || o.bloque === id) && !Folio.p.revision.ignorar.includes(o.clave)).map(o => {
+    const b = Folio.p.bloques.find(x => x.id === o.bloque); if (!b) return null;
+    if (b.texto.slice(o.inicio, o.fin) === o.antes) return o;
+    const k = b.texto.indexOf(o.antes); if (k < 0 || !o.antes) return null; // el tramo cambió de lugar
+    return { ...o, inicio: k, fin: k + o.antes.length };
+  }).filter(Boolean);
+  async function revisarConLT() {
+    if (!(await HerrLocal.pedirInstalar('languagetool', 'La revisión con LanguageTool'))) return;
+    const B = Folio.p.bloques.filter(b => ['p', 'verso', 'cita', 'h1', 'h2'].includes(b.tipo) && b.texto.trim());
+    lt = []; ltEstado = 'Arrancando LanguageTool (la primera vez tarda unos segundos)…'; App.refrescar();
+    try {
+      for (let i = 0; i < B.length; i += 25) {
+        const lote = B.slice(i, i + 25);
+        const r = await Escritorio.herr.lt(lote.map(b => ({ id: b.id, texto: b.texto.replace(/\uE000/g, ' ') })));
+        for (const { id, matches } of r) {
+          const b = B.find(x => x.id === id);
+          for (const m of matches) {
+            if (/MORFOLOGIK|HUNSPELL|SPELLER/i.test(m.regla || '')) continue; // la ortografía ya la ve el diccionario
+            if (b.tipo === 'verso' && /UPPERCASE|MAYUSC/i.test(m.regla || '')) continue;
+            const antes = b.texto.slice(m.offset, m.offset + m.length);
+            lt.push({ id: 'lt:' + id + ':' + m.offset + ':' + m.regla, clave: 'lt:' + (m.regla || '') + ':' + antes, bloque: id, inicio: m.offset, fin: m.offset + m.length, antes, despues: m.reemplazos[0] ?? null, alternativas: m.reemplazos, cat: 'LanguageTool', capa: 'languagetool', regla: 'lt:' + m.regla, msg: m.mensaje, nota: m.categoria ? 'LanguageTool · ' + m.categoria : 'LanguageTool' });
+          }
+        }
+        ltEstado = `Leyendo ${Math.min(B.length, i + 25)} de ${B.length} bloques…`; App.refrescar();
+      }
+      ltEstado = null; obs = juntar(obs.filter(o => o.capa !== 'languagetool' && !String(o.id).startsWith('ext:')));
+      App.aviso(lt.length ? `LanguageTool dejó ${lt.length} observaciones.` : 'LanguageTool no encontró nada más.');
+      if (lt.length) { filtro = 'LanguageTool'; idx = 0; }
+    } catch (e) { ltEstado = null; App.aviso('LanguageTool no pudo revisar: ' + e.message, { tipo: 'mal', ms: 8000 }); }
+    App.refrescar(); App.camino();
+  }
+
   let leyendo = null, detenerModelo = false;
   async function leerConModelo(bloques) {
     detenerModelo = false; let hechos = 0, encontradas = 0;
@@ -75,7 +109,7 @@
   const externas = () => (Folio.p.revision.externas || []);
   function juntar(propias) {
     const orden = new Map(Folio.p.bloques.map((b, i) => [b.id, i]));
-    return [...externas().filter(o => orden.has(o.bloque)), ...propias].sort((a, b) => (orden.get(a.bloque) - orden.get(b.bloque)) || (a.inicio - b.inicio));
+    return [...externas().filter(o => orden.has(o.bloque)), ...ltVigentes(), ...propias].sort((a, b) => (orden.get(a.bloque) - orden.get(b.bloque)) || (a.inicio - b.inicio));
   }
   function quitarExterna(o) { Folio.cambiar('revision:externa', p => { p.revision.externas = (p.revision.externas || []).filter(x => x.id !== o.id); }, { silencioso: true }); }
   async function aceptarExterna(o, propuesta) {
@@ -96,7 +130,7 @@
   // vuelve a revisar solo un bloque (tras aceptar una corrección cambian sus posiciones)
   async function revisarBloque(id) {
     const b = Folio.p.bloques.find(x => x.id === id); if (!b) { obs = obs.filter(o => o.bloque !== id); return; }
-    const nuevas = [...externas().filter(o => o.bloque === id), ...(await revisar([b]))];
+    const nuevas = [...externas().filter(o => o.bloque === id), ...ltVigentes(id), ...(await revisar([b]))].sort((x, y) => x.inicio - y.inicio);
     const actualId = (visibles()[idx] || {}).id;
     const pos = obs.findIndex(o => o.bloque === id);
     obs = obs.filter(o => o.bloque !== id);
@@ -107,6 +141,7 @@
 
   async function aceptar(o, propuesta) {
     if (String(o.id).startsWith('ext:')) return aceptarExterna(o, propuesta);
+    if (o.capa === 'languagetool') lt = lt.filter(x => x.id !== o.id);
     if (o.accion === 'cursiva') {
       Folio.cambiar('revision:aceptar', p => { const x = p.bloques.find(y => y.id === o.bloque); ponerCursiva(x, o.inicio, o.fin); p.revision.decididas.push({ id: Folio.uid(), regla: o.regla, cat: o.cat, bloque: o.bloque, inicio: o.inicio, antes: o.antes, despues: o.antes, cursiva: true, fecha: new Date().toISOString() }); }, { silencioso: true });
       await revisarBloque(o.bloque); App.refrescar(); App.camino(); return;
@@ -181,6 +216,9 @@
     const izq = panel('filtros', 'Observaciones', estado === 'revisando' ? 'revisando…' : `${obs.length} pendientes`, `<ul class="lista">${['Todas', ...Object.keys(cats).sort()].map(c => `<li class="${c === filtro ? 'on' : ''}" data-filtro="${c}"><a>${c}</a> <span>${c === 'Todas' ? obs.length : cats[c]}</span></li>`).join('')}</ul>
       <div class="sub">Qué revisar</div>${Object.entries(CAPAS).map(([k, v]) => `<label class="chequeo"><input type="checkbox" data-capa="${k}" ${capasActivas().includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}
       ${p.tipo === 'poesia' ? '<p class="nota">Libro de poesía: en los versos no se revisan estilo ni mayúsculas.</p>' : ''}
+      <div class="sub">LanguageTool</div>
+      <p class="nota">${ltEstado ? esc(ltEstado) : 'Más de dos mil reglas de gramática española, en tu computador. Opcional.'}</p>
+      ${ltEstado ? '' : '<div class="fila-botones"><button class="boton chico" data-r="lt">Revisar con LanguageTool</button></div>'}
       <div class="sub">Lectura con el modelo local</div>
       <p class="nota">${leyendo ? esc(leyendo) : 'Un lector atento que corre en tu computador: comenta ritmo, claridad y repeticiones.'}</p>
       <div class="fila-botones">${leyendo ? '<button class="boton chico" data-r="parar-modelo">Detener</button>' : '<button class="boton chico" data-r="modelo-bloque">Leer este bloque</button><button class="boton chico" data-r="modelo-capitulo">Leer el capítulo</button>'}</div>
@@ -224,6 +262,7 @@
         case 'diccionario': return o && alDiccionario(o);
         case 'todas': return o && aceptarTodas(o);
         case 'otra-vez': return revisarTodo();
+        case 'lt': return revisarConLT();
         case 'modelo-bloque': { const id = (o && o.bloque) || (Folio.p.bloques.find(b => b.tipo === 'p') || {}).id; const b = Folio.p.bloques.find(x => x.id === id); return b && leerConModelo([b]); }
         case 'modelo-capitulo': return leerConModelo(bloquesDelCapitulo((o && o.bloque) || Folio.p.bloques[0].id));
         case 'parar-modelo': detenerModelo = true; leyendo = 'Deteniendo después de este bloque…'; return App.refrescar();
@@ -256,7 +295,7 @@
       if (motivo === 'deshacer' || motivo === 'rehacer' || motivo === 'cargar' || motivo === 'importar' || /^texto:/.test(motivo)) { estado = 'sin-revisar'; }
     },
     // para las pruebas automáticas
-    _obs: () => obs, _estado: () => estado, revisarTodo, aceptar, descartar,
+    _obs: () => obs, _estado: () => estado, revisarTodo, aceptar, descartar, revisarConLT,
   });
   Folio.al(m => { if (m === 'importar' || m === 'cargar' || m === 'revision:externas' || /^texto:/.test(m)) { if (App.actual !== 1) estado = 'sin-revisar'; } });
 })();

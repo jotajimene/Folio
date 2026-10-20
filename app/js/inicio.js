@@ -4,6 +4,7 @@
   try { await ARCHIVO.cargar(); } catch (e) { console.error('Archivo de grabados', e); }
   await Perfil.cargar();
   try { Tipografias.registrarCSS(); } catch (e) { console.error(e); }
+  try { if (window.Escritorio && Escritorio.herr) { App.vectores = await Escritorio.herr.vectores(); HerrLocal.leer().catch(() => {}); } } catch (e) { console.error(e); }
   let recuperado = null;
   try {
     if (window.Escritorio) recuperado = await Escritorio.recuperar();

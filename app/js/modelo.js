@@ -8,28 +8,31 @@
     FPalatino: 'P052 · Palatino', FRoman: 'Nimbus Roman', FBookman: 'URW Bookman', FSchool: 'C059 · Schoolbook',
     FModern: 'Latin Modern Roman', FDeja: 'DejaVu Serif', FSans: 'Nimbus Sans', FGothic: 'URW Gothic',
     FNarrow: 'Nimbus Sans Narrow', FMono: 'Nimbus Mono', Fell: 'IM Fell English', Fraktur: 'UnifrakturMaguntia',
+    // biblioteca libre (OFL): las de «completa» traen versalitas y cifras antiguas reales
+    'L-EBGaramond': 'EB Garamond', 'L-CormorantGaramond': 'Cormorant Garamond', 'L-CrimsonPro': 'Crimson Pro', 'L-Spectral': 'Spectral', 'L-Literata': 'Literata', 'L-Alegreya': 'Alegreya', 'L-AlegreyaSans': 'Alegreya Sans', 'L-LibreCaslon': 'Libre Caslon', 'L-LibreBaskerville': 'Libre Baskerville', 'L-Lora': 'Lora', 'L-SourceSerif': 'Source Serif', 'L-Newsreader': 'Newsreader', 'L-Fraunces': 'Fraunces', 'L-PlayfairDisplay': 'Playfair Display', 'L-Cardo': 'Cardo', 'L-Vollkorn': 'Vollkorn', 'L-OldStandard': 'Old Standard', 'L-BodoniModa': 'Bodoni Moda', 'L-GentiumBook': 'Gentium Book', 'L-IBMPlexSerif': 'IBM Plex Serif', 'L-IBMPlexSans': 'IBM Plex Sans', 'L-IBMPlexMono': 'IBM Plex Mono', 'L-WorkSans': 'Work Sans', 'L-SpaceGrotesk': 'Space Grotesk', 'L-DMSerifDisplay': 'DM Serif Display', 'L-InstrumentSerif': 'Instrument Serif', 'L-BricolageGrotesque': 'Bricolage Grotesque', 'L-LibreFranklin': 'Libre Franklin',
   };
+  const RASGOS = {"L-EBGaramond": {"smcp": true, "onum": true}, "L-CormorantGaramond": {"smcp": true, "onum": true}, "L-CrimsonPro": {"smcp": false, "onum": true}, "L-Spectral": {"smcp": true, "onum": true}, "L-Literata": {"smcp": true, "onum": true}, "L-Alegreya": {"smcp": true, "onum": true}, "L-AlegreyaSans": {"smcp": false, "onum": false}, "L-LibreCaslon": {"smcp": false, "onum": true}, "L-LibreBaskerville": {"smcp": false, "onum": false}, "L-Lora": {"smcp": false, "onum": false}, "L-SourceSerif": {"smcp": true, "onum": true}, "L-Newsreader": {"smcp": false, "onum": false}, "L-Fraunces": {"smcp": false, "onum": false}, "L-PlayfairDisplay": {"smcp": false, "onum": false}, "L-Cardo": {"smcp": true, "onum": true}, "L-Vollkorn": {"smcp": true, "onum": true}, "L-OldStandard": {"smcp": false, "onum": false}, "L-BodoniModa": {"smcp": false, "onum": false}, "L-GentiumBook": {"smcp": true, "onum": false}, "L-IBMPlexSerif": {"smcp": false, "onum": false}, "L-IBMPlexSans": {"smcp": false, "onum": false}, "L-IBMPlexMono": {"smcp": false, "onum": false}, "L-WorkSans": {"smcp": false, "onum": false}, "L-SpaceGrotesk": {"smcp": false, "onum": false}, "L-DMSerifDisplay": {"smcp": false, "onum": false}, "L-InstrumentSerif": {"smcp": false, "onum": false}, "L-BricolageGrotesque": {"smcp": false, "onum": false}, "L-LibreFranklin": {"smcp": false, "onum": false}};
 
   // ---- colecciones: cada una es un sistema completo (interior + cubierta) ----
   // generador: cómo se construye la imagen de cubierta. paletas: [fondo, tinta, acento]
   const COLECCIONES = [
-    { id: 'bestiario', nombre: 'Bestiario', lema: 'Tinta y criaturas', texto: 'Fell', titulos: 'Fell', generador: 'grabado',
+    { id: 'bestiario', nombre: 'Bestiario', lema: 'Tinta y criaturas', texto: 'L-EBGaramond', titulos: 'Fell', generador: 'grabado',
       descripcion: 'Un grabado del archivo, centrado y grande, sobre papel, con doble filete. La línea clásica.', paletas: [['#efe6d2', '#1b1612', '#a3321e'], ['#e9dfc6', '#2b2118', '#6b5a2e'], ['#1b1612', '#efe6d2', '#c9a24a']] },
-    { id: 'teselario', nombre: 'Teselario', lema: 'Patrones que se repiten', texto: 'FPalatino', titulos: 'FGothic', generador: 'teselacion',
+    { id: 'teselario', nombre: 'Teselario', lema: 'Patrones que se repiten', texto: 'L-Spectral', titulos: 'FGothic', generador: 'teselacion',
       descripcion: 'Un fragmento de grabado hecho caleidoscopio: ocho espejos que lo vuelven tapiz. Título en una franja lisa.', paletas: [['#e7dcc4', '#2c3a4f', '#e7dcc4'], ['#d9c7a3', '#5a2a1e', '#f1e8d5'], ['#f2ece0', '#3d5a3a', '#f2ece0'], ['#c8d3c6', '#1c1c1c', '#f4efe6']] },
-    { id: 'archivo', nombre: 'Archivo', lema: 'Memoria en semitono', texto: 'FRoman', titulos: 'FMono', generador: 'foto',
+    { id: 'archivo', nombre: 'Archivo', lema: 'Memoria en semitono', texto: 'L-SourceSerif', titulos: 'L-IBMPlexMono', generador: 'foto',
       descripcion: 'Una fotografía tuya (o un grabado) en semitono a dos tintas que corre por toda la tapa, con datos como ficha.', paletas: [['#e8e4da', '#1d1d1b', '#d2462a'], ['#f0ead8', '#1f3a5f', '#f0ead8'], ['#e3e0d6', '#3a2e2a', '#c79a2b']] },
-    { id: 'umbral', nombre: 'Umbral', lema: 'Color plano y recorte', texto: 'FPalatino', titulos: 'FSans', generador: 'umbral',
+    { id: 'umbral', nombre: 'Umbral', lema: 'Color plano y recorte', texto: 'L-Literata', titulos: 'FSans', generador: 'umbral',
       descripcion: 'Formas planas recortadas, pocos colores saturados y tipografía grande; a veces un grabado metido en una de las formas.', paletas: [['#f2c14e', '#1d3557', '#e63946'], ['#e9e3d5', '#e2532d', '#24345c'], ['#9ad1c7', '#1f2a44', '#f25c3b'], ['#f4a3b4', '#2a2a72', '#ffd23f'], ['#1f2a44', '#f2c14e', '#e2532d']] },
-    { id: 'friso', nombre: 'Friso', lema: 'Ornamento en bandas', texto: 'FBookman', titulos: 'FBookman', generador: 'cenefas',
+    { id: 'friso', nombre: 'Friso', lema: 'Ornamento en bandas', texto: 'L-Cardo', titulos: 'L-Cardo', generador: 'cenefas',
       descripcion: 'Una figura del archivo repetida en bandas arriba y abajo; el título en el centro, sereno.', paletas: [['#efe6d2', '#1b1612', '#7a1f12'], ['#e6ecea', '#1b2a33', '#1b2a33'], ['#f1e4d0', '#4a2c1a', '#a46a2a']] },
-    { id: 'fragmento', nombre: 'Fragmento', lema: 'Lo mínimo, ampliado', texto: 'FModern', titulos: 'FNarrow', generador: 'detalle',
+    { id: 'fragmento', nombre: 'Fragmento', lema: 'Lo mínimo, ampliado', texto: 'L-CrimsonPro', titulos: 'FNarrow', generador: 'detalle',
       descripcion: 'Un detalle de un grabado ampliado a sangre, como visto con lupa. Tú eliges el encuadre.', paletas: [['#f0e9db', '#1b1612', '#1b1612'], ['#dfe7e2', '#253a33', '#253a33'], ['#f1dfd0', '#5c1f14', '#5c1f14']] },
-    { id: 'herbario', nombre: 'Herbario', lema: 'Láminas botánicas', texto: 'FSchool', titulos: 'FPalatino', generador: 'reticula',
+    { id: 'herbario', nombre: 'Herbario', lema: 'Láminas botánicas', texto: 'L-Alegreya', titulos: 'L-Alegreya', generador: 'reticula',
       descripcion: 'Una retícula de nueve hierbas del archivo, como lámina de herbario.', paletas: [['#efe6d2', '#33402c', '#8a3b22'], ['#f2efe6', '#1b1612', '#2f5a7a'], ['#e7ddc8', '#3b2a1e', '#3b2a1e']] },
-    { id: 'eco', nombre: 'Eco', lema: 'La palabra como textura', texto: 'FMono', titulos: 'FMono', generador: 'texto',
+    { id: 'eco', nombre: 'Eco', lema: 'La palabra como textura', texto: 'L-IBMPlexMono', titulos: 'FMono', generador: 'texto',
       descripcion: 'El título repetido hasta volverse textura. Puramente tipográfica.', paletas: [['#f1efe8', '#1b1612', '#e2532d'], ['#1b1612', '#d9d4c7', '#e2532d'], ['#e8f0e9', '#1d4d3a', '#1d4d3a']] },
-    { id: 'constelacion', nombre: 'Constelación', lema: 'Mapas de letras', texto: 'FSans', titulos: 'FNarrow', generador: 'puntos',
+    { id: 'constelacion', nombre: 'Constelación', lema: 'Mapas de letras', texto: 'L-Newsreader', titulos: 'L-SpaceGrotesk', generador: 'puntos',
       descripcion: 'Una constelación generada desde las letras del título: puntos y trazos.', paletas: [['#1c2433', '#efe6d2', '#f2c14e'], ['#f2ede3', '#1b1612', '#a3321e'], ['#24345c', '#f3eee4', '#e2532d']] },
   ];
   // biblioteca de paletas que sirve para cualquier colección: [fondo, tinta, acento]
@@ -48,6 +51,7 @@
     poesia: { nombre: 'Poesía', alineacion: 'left', sangria: 0, entreParrafos: 8, verso: true },
     ensayo: { nombre: 'Ensayo', alineacion: 'justify', sangria: 0, entreParrafos: 6, verso: false },
     ilustrado: { nombre: 'Ilustrado o fotolibro', alineacion: 'left', sangria: 0, entreParrafos: 6, verso: false },
+    facsimil: { nombre: 'Facsimilar', alineacion: 'left', sangria: 0, entreParrafos: 4, verso: false },
     librojuego: { nombre: 'Librojuego', alineacion: 'justify', sangria: 1.2, entreParrafos: 0, verso: false },
   };
   const FORMATOS = { A5: [148, 210], A6: [105, 148], '13×20': [130, 200], '15×23': [150, 230], '17×24': [170, 240] };
@@ -68,7 +72,7 @@
       bloques: [], original: [], origen: null,
       revision: { decididas: [], ignorar: [], diccionario: [] },
       coleccion: 'bestiario', numero: '01', tipo: 'narrativa', formato: 'A5',
-      ajustes: { cuerpo: 11, interlineado: 1.45, margenInterior: 20, margenExterior: 16, margenSuperior: 18, margenInferior: 22, sangria: 1.2, entreParrafos: 0, alineacion: 'justify', tituloCuerpo: 22, aireTitulo: 40, espaciado: 0, capituloDerecha: true, saltoCapitulo: 'derecha', cabeceras: true, guionado: true, capitular: true, fuenteTexto: null, fuenteTitulos: null },
+      ajustes: { cuerpo: 11, interlineado: 1.45, margenInterior: 20, margenExterior: 16, margenSuperior: 18, margenInferior: 22, sangria: 1.2, entreParrafos: 0, alineacion: 'justify', tituloCuerpo: 22, aireTitulo: 40, espaciado: 0, capituloDerecha: true, saltoCapitulo: 'derecha', cabeceras: true, guionado: true, capitular: true, cifrasAntiguas: true, versalitasInicio: true, ligaduras: true, justificacionFina: true, viudasAuto: true, registro: false, fuenteTexto: null, fuenteTitulos: null },
       ilustraciones: [],
       cubierta: { semilla: 1, paleta: 0, colores: null, imagen: null, foto: null, escalaTitulo: 1, solapas: false, recorte: null },
       impresion: { pliego: 16, papelGramaje: 80, grosorHoja: 0.1 },
@@ -95,11 +99,13 @@
   // ---- estado global con historial ----
   const oyentes = new Set();
   const Folio = {
-    COLECCIONES, PALETAS, FUENTES, TIPOS_LIBRO, FORMATOS, LIMITES, limitar, uid,
+    COLECCIONES, PALETAS, FUENTES, RASGOS, TIPOS_LIBRO, FORMATOS, LIMITES, limitar, uid,
     p: normalizar(null), ruta: null, recursos: {}, originales: {}, guardadoDisco: null, guardadoAuto: null, sucio: false,
     deshacer: [], rehacer: [],
     al(f) { oyentes.add(f); return () => oyentes.delete(f); },
     avisar(motivo) { for (const f of oyentes) try { f(motivo); } catch (e) { console.error(e); } },
+    // ¿hay algo que componer? (texto, folios facsimilares o imágenes)
+    tieneContenido(p = Folio.p) { return !!(p.bloques.length || (p.facsimil && (p.facsimil.folios || []).length) || (p.ilustraciones || []).length); },
     coleccion() { return COLECCIONES.find(c => c.id === Folio.p.coleccion) || COLECCIONES[0]; },
     formatoMm() { return FORMATOS[Folio.p.formato] || FORMATOS.A5; },
     // todo cambio pasa por aquí: guarda una instantánea para deshacer

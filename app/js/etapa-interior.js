@@ -24,6 +24,17 @@
       <label class="chequeo"><input type="checkbox" data-ajc="cabeceras" ${a.cabeceras ? 'checked' : ''}> Cabeceras (título y capítulo)</label>
       <label class="chequeo"><input type="checkbox" data-ajc="guionado" ${a.guionado ? 'checked' : ''}> Partir palabras (guionado español)</label>
       <label class="chequeo"><input type="checkbox" data-ajc="capitular" ${a.capitular !== false ? 'checked' : ''}> Letra capitular al iniciar capítulo</label>
+      <div class="sub">Tipografía fina</div>
+      <label class="chequeo"><input type="checkbox" data-ajc="justificacionFina" ${a.justificacionFina !== false ? 'checked' : ''}> Justificación de párrafo completo (Knuth y Plass)</label>
+      <label class="chequeo"><input type="checkbox" data-ajc="viudasAuto" ${a.viudasAuto !== false ? 'checked' : ''}> Arreglar viudas y huérfanas solo</label>
+      <label class="chequeo"><input type="checkbox" data-ajc="cifrasAntiguas" ${a.cifrasAntiguas !== false ? 'checked' : ''}> Cifras antiguas (si la letra las tiene)</label>
+      <label class="chequeo"><input type="checkbox" data-ajc="versalitasInicio" ${a.versalitasInicio !== false ? 'checked' : ''}> Primera línea del capítulo en versalitas</label>
+      <label class="chequeo"><input type="checkbox" data-ajc="ligaduras" ${a.ligaduras !== false ? 'checked' : ''}> Ligaduras (fi, fl)</label>
+      <label class="chequeo"><input type="checkbox" data-ajc="registro" ${a.registro ? 'checked' : ''}> Registro: las líneas calzan entre página y página</label>
+      <div class="sub">Portadillas y guardas</div>
+      <label class="ajuste"><span>Al abrir cada capítulo</span><select data-ajs="portadillas"><option value="no" ${(a.portadillas || 'no') === 'no' ? 'selected' : ''}>Solo el título</option><option value="vineta" ${a.portadillas === 'vineta' ? 'selected' : ''}>Una viñeta grabada sobre el título</option><option value="pagina" ${a.portadillas === 'pagina' ? 'selected' : ''}>Un grabado a página entera enfrentado</option></select></label>
+      <label class="ajuste"><span>Guardas</span><select data-guardas="modo"><option value="no" ${!(p.guardas && p.guardas.modo !== 'no') ? 'selected' : ''}>Sin guardas</option><option value="libro" ${p.guardas && p.guardas.modo === 'libro' ? 'selected' : ''}>Dentro del libro (primeras y últimas páginas)</option><option value="aparte" ${p.guardas && p.guardas.modo === 'aparte' ? 'selected' : ''}>Aparte, para papel de color (en Impresión)</option></select></label>
+      ${p.guardas && p.guardas.modo !== 'no' ? `<label class="ajuste"><span>Patrón de las guardas</span><select data-guardas="estilo">${[['caleidoscopio', 'Caleidoscopio de grabados'], ['constelacion', 'Constelación'], ['texto', 'Textura del título'], ['liso', 'Color liso']].map(([k, v]) => `<option value="${k}" ${(p.guardas.estilo || 'caleidoscopio') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>` : ''}
       <label class="ajuste"><span>Tipografía del texto</span><select data-ajs="fuenteTexto"><option value="">La de la colección</option>${fuentes}</select></label>
       <label class="ajuste"><span>Tipografía de los títulos</span><select data-ajs="fuenteTitulos"><option value="">La de la colección</option>${fuentes}</select></label>
       <button class="boton chico" data-r="tipografia" style="margin-top:8px">Cargar una tipografía tuya…</button>
@@ -78,6 +89,7 @@
       comp = `<ul class="lista">${['Línea viuda al comienzo de la página', 'Línea huérfana al final de la página', 'Título solo al pie de la página', 'Contenido que se sale de la caja'].map(m => `<li class="${grupos[m] ? 'mal' : ''}">${m.replace(' de la página', '').replace(' al comienzo', '').replace(' al final', '')} <span>${grupos[m] ? grupos[m].map(n => `<button class="enlace" data-pag="${n}">p. ${n}</button>`).join(' ') : '0'}</span></li>`).join('')}
         ${Object.keys(grupos).filter(m => /ppp|cargar/.test(m)).map(m => `<li class="mal">${esc(m)} <span>${grupos[m].map(n => `<button class="enlace" data-pag="${n}">p. ${n}</button>`).join(' ')}</span></li>`).join('')}</ul>
         ${resultado.blancas && resultado.blancas.length ? `<p class="nota">Páginas en blanco: ${resultado.blancas.map(n => `<button class="enlace" data-pag="${n}">${n}</button>`).join(', ')}. Están ahí para que lo que sigue empiece en página impar; si no las quieres, cambia «Cada capítulo empieza» a la izquierda.</p>` : ''}
+        ${resultado.arreglosFinos ? `<p class="nota">Folio arregló ${resultado.arreglosFinos} ${resultado.arreglosFinos === 1 ? 'viuda u huérfana' : 'viudas y huérfanas'} ajustando imperceptiblemente ${resultado.ajustados} ${resultado.ajustados === 1 ? 'párrafo' : 'párrafos'}.</p>` : ''}
         <p class="nota">${resultado.paginas} páginas${resultado.paginas % 4 ? ` · para pliegos se agregan ${4 - resultado.paginas % 4} en blanco` : ''}.</p>`;
     }
     const ilus = (p.ilustraciones || []).map((il, i) => {
@@ -88,7 +100,7 @@
   }
   function render() {
     const p = Folio.p;
-    if (!p.bloques.length) return { cols: '1fr', html: panel('vacio', 'Interior', 'sin texto', `<div class="vacio"><h2>No hay texto que componer</h2><p>Primero trae el manuscrito.</p><button class="boton taco" data-ir="0">← Ir al manuscrito</button></div>`) };
+    if (!Folio.tieneContenido(p)) return { cols: '1fr', html: panel('vacio', 'Interior', 'sin texto', `<div class="vacio"><h2>No hay texto que componer</h2><p>Primero trae el manuscrito.</p><button class="boton taco" data-ir="0">← Ir al manuscrito</button></div>`) };
     return {
       cols: '290px 1fr 290px',
       html: panel('coleccion', 'Colección', 'líneas de la editorial', columnaIzq()) +
@@ -96,20 +108,30 @@
         panel('compr', 'Comprobaciones', resultado ? (resultado.avisos.length ? `${resultado.avisos.length} por revisar` : 'todo en orden') : '', columnaDer(), App.seguir(4, 'Diseñar la cubierta →')),
     };
   }
-  function componer() {
-    const cont = document.querySelector('.marco-vista'); if (!cont) return;
-    componiendo = true; const st = document.querySelector('.estado-comp'); if (st) st.textContent = 'componiendo…';
+  let claveGuarda = null;
+  async function prepararGuarda() {
+    const p = Folio.p; if (!p.guardas || p.guardas.modo === 'no') return;
+    const c = Folio.coleccion(), clave = [p.guardas.estilo, p.coleccion, p.cubierta.semilla, p.cubierta.paleta, (p.cubierta.colores || []).join(), p.formato, p.titulo].join('|');
+    if (clave === claveGuarda && Folio.recursos['guarda.png']) return;
+    await ARCHIVO.cargar(); Folio.recursos['guarda.png'] = await Cubiertas.guarda(p, { k: 6, recursos: Folio.recursos }); claveGuarda = clave;
+  }
+  async function componer() {
+    componiendo = true;
+    try { await prepararGuarda(); } catch (e) { console.error(e); }
+    try { await App.asegurarVectores(); } catch (e) { console.error(e); }
+    const cont = document.querySelector('.marco-vista'); if (!cont) { componiendo = false; return; }
+    const st = document.querySelector('.estado-comp'); if (st) st.textContent = 'componiendo…';
     const f = document.createElement('iframe'); f.className = 'vista-libro cargando'; f.src = 'vista.html'; f.title = 'Vista del interior';
     if (pendienteMarco) pendienteMarco.remove(); pendienteMarco = f;
     cont.appendChild(f);
   }
-  function programar(ms = 650) { clearTimeout(tRecomp); tRecomp = setTimeout(componer, ms); }
+  function programar(ms = 650) { clearTimeout(tRecomp); componiendo = true; tRecomp = setTimeout(componer, ms); }
   addEventListener('message', e => {
     if (e.origin !== location.origin || !e.data) return;
     const src = e.source, d = e.data;
     if (!pendienteMarco && !marco) return;
     if (d.tipo === 'vista-lista' && pendienteMarco && src === pendienteMarco.contentWindow) {
-      src.postMessage({ tipo: 'componer', proyecto: JSON.parse(JSON.stringify(Folio.p)), recursos: Folio.recursos, zoom }, location.origin);
+      src.postMessage({ tipo: 'componer', proyecto: JSON.parse(JSON.stringify(Folio.p)), recursos: Folio.recursos, zoom, opciones: { vectores: App.vectores || [] } }, location.origin);
     }
     if (d.tipo === 'compuesto' && pendienteMarco && src === pendienteMarco.contentWindow) {
       const y = marco && marco.contentWindow ? marco.contentWindow.scrollY : 0;
@@ -120,6 +142,7 @@
       Folio.cambiar('composicion', p => { p.composicion = { paginas: resultado.paginas, avisos: resultado.avisos.length, fecha: new Date().toISOString() }; }, { sinHistorial: true, silencioso: true });
       actualizarLados();
     }
+    if (d.tipo === 'folio' && marco && src === marco.contentWindow) { const k = (Folio.p.facsimil.folios || []).findIndex(f => f.id === d.id); if (k >= 0) { Facsimil._ir(k); Folio.cambiar('facsimil:vista', p => { p.facsimil.editarTexto = false; }, { sinHistorial: true, silencioso: true }); App.ir(0); } return; }
     if ((d.tipo === 'bloque' || d.tipo === 'grabado') && marco && src === marco.contentWindow) { elegido = { tipo: d.tipo, id: d.id, pagina: d.pagina }; pintarDer(); return; }
     if (d.tipo === 'error' && pendienteMarco && src === pendienteMarco.contentWindow) { componiendo = false; App.aviso('No se pudo componer: ' + d.error, { tipo: 'mal', ms: 9000 }); }
   });
@@ -132,7 +155,7 @@
     App.camino();
   }
   function montar(m) {
-    if (!Folio.p.bloques.length) return;
+    if (!Folio.tieneContenido()) return;
     // la vista vieja se reutiliza si existe (redibujar no obliga a recomponer)
     // un iframe movido en el DOM se recarga: siempre se compone en uno nuevo
     marco = null; pendienteMarco = null; componer();
@@ -172,6 +195,7 @@
     m.addEventListener('change', e => {
       const t = e.target;
       if (t.dataset.ajs) { if (/^fuente/.test(t.dataset.ajs)) Tipografias.alProyecto(t.value); Folio.cambiar('ajuste:' + t.dataset.ajs, p => { p.ajustes[t.dataset.ajs] = t.value || null; }); }
+      if (t.dataset.guardas) Folio.cambiar('ajuste:guardas', p => { p.guardas = { modo: 'no', estilo: 'caleidoscopio', ...(p.guardas || {}), [t.dataset.guardas]: t.value }; });
       if (t.dataset.ajc) Folio.cambiar('ajuste:' + t.dataset.ajc, p => { p.ajustes[t.dataset.ajc] = t.checked; });
       if (t.dataset.il) Folio.cambiar('ajuste:ilustracion', p => { p.ilustraciones[+t.dataset.il][t.dataset.campo] = t.value; });
     });
@@ -188,7 +212,7 @@
       if (motivo === 'composicion') return false;
       if (/^ajuste:/.test(motivo) && !/formato|ilustracion|restablecer/.test(motivo)) { programar(); return false; }
     },
-    salir() { clearTimeout(tRecomp); },
+    salir() { clearTimeout(tRecomp); if (!pendienteMarco) componiendo = false; },
     _resultado: () => resultado, _componiendo: () => componiendo,
   });
   // cualquier cambio del texto invalida la composición guardada

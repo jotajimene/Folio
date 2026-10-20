@@ -1,0 +1,182 @@
+{
+"L-EBGaramond": {
+"nombre": "EB Garamond",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-CormorantGaramond": {
+"nombre": "Cormorant Garamond",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-CrimsonPro": {
+"nombre": "Crimson Pro",
+"smcp": false,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-Spectral": {
+"nombre": "Spectral",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-Literata": {
+"nombre": "Literata",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-Alegreya": {
+"nombre": "Alegreya",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-AlegreyaSans": {
+"nombre": "Alegreya Sans",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-LibreCaslon": {
+"nombre": "Libre Caslon",
+"smcp": false,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-LibreBaskerville": {
+"nombre": "Libre Baskerville",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-Lora": {
+"nombre": "Lora",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-SourceSerif": {
+"nombre": "Source Serif",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-Newsreader": {
+"nombre": "Newsreader",
+"smcp": false,
+"onum": false,
+"liga": true,
+"completa": true
+},
+"L-Fraunces": {
+"nombre": "Fraunces",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-PlayfairDisplay": {
+"nombre": "Playfair Display",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-Cardo": {
+"nombre": "Cardo",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-Vollkorn": {
+"nombre": "Vollkorn",
+"smcp": true,
+"onum": true,
+"liga": true,
+"completa": true
+},
+"L-OldStandard": {
+"nombre": "Old Standard",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-BodoniModa": {
+"nombre": "Bodoni Moda",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-GentiumBook": {
+"nombre": "Gentium Book",
+"smcp": true,
+"onum": false,
+"liga": true,
+"completa": true
+},
+"L-IBMPlexSerif": {
+"nombre": "IBM Plex Serif",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-IBMPlexSans": {
+"nombre": "IBM Plex Sans",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-IBMPlexMono": {
+"nombre": "IBM Plex Mono",
+"smcp": false,
+"onum": false,
+"liga": false
+},
+"L-WorkSans": {
+"nombre": "Work Sans",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-SpaceGrotesk": {
+"nombre": "Space Grotesk",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-DMSerifDisplay": {
+"nombre": "DM Serif Display",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-InstrumentSerif": {
+"nombre": "Instrument Serif",
+"smcp": false,
+"onum": false,
+"liga": true
+},
+"L-BricolageGrotesque": {
+"nombre": "Bricolage Grotesque",
+"smcp": false,
+"onum": false,
+"liga": false
+},
+"L-LibreFranklin": {
+"nombre": "Libre Franklin",
+"smcp": false,
+"onum": false,
+"liga": true
+}
+}

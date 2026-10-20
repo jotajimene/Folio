@@ -35,17 +35,28 @@ function crearVentana() {
 
 function abrirFuera(url) {
   // Solo enlaces de atribución de las fuentes del archivo
-  if (/^https:\/\/(commons\.wikimedia\.org|archive\.org|www\.biodiversitylibrary\.org|creativecommons\.org)\//.test(url)) shell.openExternal(url);
+  if (/^https:\/\/(commons\.wikimedia\.org|archive\.org|www\.biodiversitylibrary\.org|creativecommons\.org|github\.com\/jotajimene\/Folio\/releases)\//.test(url) || url === 'https://github.com/jotajimene/Folio/releases') shell.openExternal(url);
 }
 
 app.whenReady().then(() => {
   require('./modelo-local').registrar();
+  Externas.registrar(RAIZ);
   protocol.handle('folio', req => {
     const u = new URL(req.url);
+    if (u.host === 'datos') { // solo lo generado o traído en este equipo: vectores y archivo ampliado
+      const pn = decodeURIComponent(u.pathname), extra = pn.startsWith('/archivo/');
+      const base = extra ? Externas.carpetaExtra() : Externas.carpetaVect(), ruta = path.normalize(path.join(base, pn.replace(/^\/(vectores|archivo)\//, '')));
+      if (!ruta.startsWith(base)) return new Response('No', { status: 403 });
+      if (!fs.existsSync(ruta)) return new Response('', { status: 404 });
+      return net.fetch(pathToFileURL(ruta).toString());
+    }
     const ruta = path.normalize(path.join(RAIZ, decodeURIComponent(u.pathname)));
     if (!ruta.startsWith(RAIZ)) return new Response('No', { status: 403 });
     return net.fetch(pathToFileURL(ruta).toString());
   });
+  // micrófono para el dictado (solo la ventana de Folio); nada más
+  session.defaultSession.setPermissionRequestHandler((wc, permiso, cb, d) => cb(permiso === 'media' && /^folio:/.test((d && d.requestingUrl) || wc.getURL()) && !(d && d.mediaTypes || []).includes('video')));
+  session.defaultSession.setPermissionCheckHandler((wc, permiso, origen) => permiso === 'media' && /^folio:/.test(origen || ''));
   // Sin red: cualquier petición fuera de folio://, data: o blob: se cancela.
   session.defaultSession.webRequest.onBeforeRequest((d, cb) => {
     const ok = /^(folio|data|blob|devtools|chrome-extension):/.test(d.url);
@@ -57,7 +68,8 @@ app.whenReady().then(() => {
       { label: 'Abrir proyecto…', accelerator: 'CmdOrCtrl+O', click: () => ventana.webContents.send('menu', 'abrir') },
       { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => ventana.webContents.send('menu', 'guardar') },
       { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => ventana.webContents.send('menu', 'guardar-como') },
-      { type: 'separator' }, { label: 'Modelo de texto local…', click: () => ventana.webContents.send('menu', 'modelo') }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') },
+      { type: 'separator' }, { label: 'Modelo de texto local…', click: () => ventana.webContents.send('menu', 'modelo') }, { label: 'Archivo de grabados', click: () => ventana.webContents.send('menu', 'archivo-grabados') }, { label: 'Herramientas de Folio…', click: () => ventana.webContents.send('menu', 'herramientas') },
+      { type: 'separator' }, { label: 'Buscar actualizaciones…', click: () => ventana.webContents.send('menu', 'actualizar') },
       { type: 'separator' }, { role: 'quit', label: 'Salir' }] },
     { label: 'Editar', submenu: [{ label: 'Deshacer', accelerator: 'CmdOrCtrl+Z', click: () => ventana.webContents.send('menu', 'deshacer') }, { label: 'Rehacer', accelerator: 'CmdOrCtrl+Y', click: () => ventana.webContents.send('menu', 'rehacer') }, { type: 'separator' }, { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' }, { role: 'selectAll', label: 'Seleccionar todo' }] },
     { label: 'Ver', submenu: [{ role: 'reload', label: 'Recargar' }, { role: 'toggleDevTools', label: 'Herramientas de desarrollo' }, { type: 'separator' }, { role: 'resetZoom', label: 'Tamaño real' }, { role: 'zoomIn', label: 'Acercar' }, { role: 'zoomOut', label: 'Alejar' }, { role: 'togglefullscreen', label: 'Pantalla completa' }] },
@@ -100,8 +112,22 @@ ipcMain.handle('proyecto:guardar', async (_e, { ruta, datos, como }) => {
   await fsp.writeFile(tmp, buf);
   if (fs.existsSync(ruta)) await fsp.copyFile(ruta, ruta + '.bak').catch(() => {});
   await fsp.rename(tmp, ruta);
-  return { ruta, bytes: buf.length, fecha: new Date().toISOString() };
+  const respaldo = await respaldar(ruta).catch(e => ({ error: e.message }));
+  return { ruta, bytes: buf.length, fecha: new Date().toISOString(), respaldo };
 });
+// copia en una segunda carpeta (un pendrive, Dropbox, otro disco): las últimas 5 de cada libro
+async function respaldar(ruta) {
+  let perfil = null; try { perfil = JSON.parse(await fsp.readFile(rutaPerfil(), 'utf8')); } catch {}
+  const dir = perfil && perfil.respaldo; if (!dir) return null;
+  if (!fs.existsSync(dir)) return { error: 'La carpeta de respaldo no está disponible: ' + dir };
+  const base = path.basename(ruta, '.folio'), sello = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const dest = path.join(dir, `${base} · ${sello}.folio`);
+  await fsp.copyFile(ruta, dest);
+  const mias = (await fsp.readdir(dir)).filter(f => f.startsWith(base + ' · ') && f.endsWith('.folio')).sort();
+  for (const f of mias.slice(0, Math.max(0, mias.length - 5))) await fsp.unlink(path.join(dir, f)).catch(() => {});
+  return { ruta: dest };
+}
+ipcMain.handle('carpeta:elegir', async (_e, titulo) => { const r = await dialog.showOpenDialog(ventana, { title: titulo || 'Elegir carpeta', properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 ipcMain.handle('proyecto:abrir', async (_e, ruta) => {
   if (!ruta) {
     const r = await dialog.showOpenDialog(ventana, { title: 'Abrir proyecto de Folio', filters: [{ name: 'Proyecto de Folio', extensions: ['folio', 'json'] }], properties: ['openFile'] });
@@ -169,6 +195,7 @@ const pendientes = {};
 ipcMain.on('imprimir:listo', (e, info) => { const f = pendientes[e.sender.id]; if (f) f(info); });
 
 const Impresion = require('./impresion');
+const Externas = require('./herramientas-externas');
 // tapa como imagen PNG (para el libro digital): se compone en una ventana oculta y se fotografía
 async function tapaPNG(trabajo, k = 2) {
   const mm = trabajo.mm; const ancho = Math.round(mm[0] * 96 / 25.4), alto = Math.round(mm[1] * 96 / 25.4);
@@ -202,6 +229,17 @@ async function procesar(trabajo) {
       bytes = Buffer.from(await final.save()); extra = { mapa, blancas, instrucciones, ejemplares: num.hasta - num.desde + 1 };
     } else { const r = await Impresion.numerar(pdf, { ...num }); bytes = Buffer.from(r.bytes); extra = { ejemplares: r.ejemplares }; }
   } else if (trabajo.tipo === 'pliegos') { const r = await Impresion.imponer(pdf, trabajo.imposicion); bytes = Buffer.from(r.bytes); extra = { mapa: r.mapa, blancas: r.blancas, instrucciones: r.instrucciones }; }
+  if (trabajo.opciones && trabajo.opciones.pdfx && (trabajo.tipo === 'lectura' || trabajo.tipo === 'cubierta')) {
+    const tmp = path.join(require('os').tmpdir(), 'folio-' + Date.now()), ent = tmp + '-rgb.pdf', sal = tmp + '-x.pdf';
+    await fsp.writeFile(ent, bytes);
+    try {
+      await Externas.aPDFX(ent, sal, { titulo: (trabajo.proyecto && trabajo.proyecto.titulo) || 'Folio' });
+      bytes = await fsp.readFile(sal);
+      const t = await Externas.tinta(sal).catch(() => null);
+      if (t && t.length) extra.tinta = { maxima: Math.max(...t.map(x => x.tac ?? x.total)), media: t.reduce((a, x) => a + x.total, 0) / t.length, paginas: t.length, peor: t.findIndex(x => (x.tac ?? x.total) === Math.max(...t.map(y => y.tac ?? y.total))) + 1 };
+      extra.pdfx = true;
+    } finally { fsp.unlink(ent).catch(() => {}); fsp.unlink(sal).catch(() => {}); }
+  }
   return { bytes, extra, info };
 }
 async function resumen(bytes) { const doc = await PDFDocument.load(bytes); const p0 = doc.getPage(0).getSize(); return { paginas: doc.getPageCount(), mm: [Math.round(p0.width / MM * 10) / 10, Math.round(p0.height / MM * 10) / 10] }; }

@@ -105,7 +105,7 @@
       $('#b-rehacer').disabled = !r; $('#b-rehacer').title = r ? `Rehacer: ${etiquetaHumana(r.etiqueta)} (Ctrl+Y)` : 'Nada que rehacer';
     },
     async guardar(como) {
-      try { const r = await Folio.guardar(como); if (r && !r.cancelado) App.aviso('Proyecto guardado en ' + (r.ruta || 'disco') + '.'); }
+      try { const r = await Folio.guardar(como); if (r && !r.cancelado) { App.aviso('Proyecto guardado en ' + (r.ruta || 'disco') + (r.respaldo && r.respaldo.ruta ? ', con copia de respaldo' : '') + '.'); if (r.respaldo && r.respaldo.error) App.aviso('No pude dejar la copia de respaldo: ' + r.respaldo.error, { tipo: 'mal', ms: 8000 }); } }
       catch (e) { App.aviso('No se pudo guardar: ' + e.message, { tipo: 'mal', ms: 8000 }); }
     },
     async abrir() {
@@ -156,7 +156,17 @@
     if (a === 'rehacer') { if (editable(document.activeElement)) document.execCommand('redo'); else rehacer(); }
     if (a === 'archivo-grabados') window.Archivo && Archivo.abrir();
     if (a === 'modelo') window.Asistente && Asistente.ventana();
+    if (a === 'herramientas') window.HerrLocal && HerrLocal.ventana();
+    if (a === 'actualizar') buscarActualizacion();
   });
+  // solo cuando lo pides: pregunta a GitHub si hay una versión nueva y abre la página de descarga
+  async function buscarActualizacion() {
+    App.aviso('Buscando una versión nueva…', { ms: 2500 });
+    const r = await Escritorio.herr.actualizar();
+    if (r.error) return App.modal({ titulo: 'Actualizaciones', cuerpo: r.error === 'privado' ? `<p>Tienes Folio ${esc(r.actual)}. No pude ver las versiones publicadas: el repositorio de Folio es privado. Para que esta búsqueda funcione, las versiones tienen que publicarse en un repositorio público.</p>` : `<p>Tienes Folio ${esc(r.actual)}. No pude conectarme para revisar (${esc(r.mensaje)}). Folio sigue funcionando igual sin internet.</p>`, botones: [{ texto: 'Cerrar', valor: null }] });
+    const v = await App.modal({ titulo: 'Actualizaciones', cuerpo: r.hay ? `<p>Hay una versión nueva: <b>Folio ${esc(r.version)}</b> (tienes la ${esc(r.actual)}).</p>${r.notas ? `<pre class="notas-version">${esc(r.notas)}</pre>` : ''}<p class="nota">Se abre la página de descarga en tu navegador. Tus proyectos, perfil y herramientas quedan donde están.</p>` : `<p>Tienes la última versión: Folio ${esc(r.actual)}.</p>`, botones: r.hay ? [{ texto: 'Ahora no', valor: null }, { texto: 'Abrir la página de descarga', taco: true, valor: 'ok' }] : [{ texto: 'Cerrar', valor: null }] });
+    if (v === 'ok') Escritorio.externo(r.pagina);
+  }
   async function nuevo() {
     if (Folio.p.bloques.length && Folio.sucio && !(await App.confirmar('¿Empezar un proyecto nuevo? Los cambios no guardados en disco quedan solo en la copia automática de hoy.', 'Empezar uno nuevo'))) return;
     Folio.nuevoProyecto(); App.ir(0, { forzar: true });
@@ -188,6 +198,16 @@
   App.leerDataURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
   App.descargar = (nombre, contenido, tipo = 'text/plain') => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([contenido], { type: tipo })); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  // grabados vectorizados (Potrace) para los que usa el libro: se generan una vez y quedan en el equipo
+  App.vectores = [];
+  App.asegurarVectores = async (extra = []) => {
+    if (!window.Escritorio || !Escritorio.herr) return App.vectores;
+    const p = Folio.p, ids = new Set([...(p.ilustraciones || []).map(i => i.lamina).filter(Boolean), ...(window.Libro ? Libro.vinetas(p) : []), ...extra]);
+    if (p.cubierta && p.cubierta.imagen && /^L\d+$/.test(p.cubierta.imagen)) ids.add(p.cubierta.imagen);
+    const faltan = [...ids].filter(id => !App.vectores.includes(id));
+    if (faltan.length) { const hechos = await Escritorio.herr.vectorizar(faltan); App.vectores = [...new Set([...App.vectores, ...hechos])]; }
+    return App.vectores;
   };
   App.miniIl = il => il.lamina ? ARCHIVO.mini(il.lamina) : (il.recurso && Folio.recursos[il.recurso]) || '';
   App.MODOS_IL = { pagina: 'Página completa', media: 'Media página', vineta: 'Viñeta', sangre: 'Página a sangre', doble: 'Doble página a sangre', blanca: 'Página en blanco (respiro)' };
